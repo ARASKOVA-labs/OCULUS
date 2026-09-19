@@ -1,0 +1,3 @@
+[submodule "araskova-doccraft"]
+	path = araskova-doccraft
+	url = https://github.com/ARASKOVA-labs/araskova-doccraft.git

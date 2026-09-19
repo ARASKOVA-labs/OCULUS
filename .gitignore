@@ -1,0 +1,29 @@
+# Rust
+target/
+**/*.rs.bk
+
+# Node & Bun
+node_modules/
+dist/
+.tanstack/
+bun.lockb
+
+# Standalone macOS build bundle
+dist-standalone/
+
+# C++ native build artifacts
+native/build/
+
+# David-Stack local checkout
+David-Stack/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+Thumbs.db
+
+# Logs & Scratch
+*.log
+scratch/

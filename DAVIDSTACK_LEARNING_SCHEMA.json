@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DavidStackBugKnowledgeEntry",
+  "description": "Schema for capturing verified bugs, root causes, and DavidStack learning proposals.",
+  "type": "object",
+  "properties": {
+    "issue_id": {
+      "type": "string",
+      "pattern": "^BUG-[0-9]{3}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 5
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+    },
+    "component": {
+      "type": "string",
+      "enum": ["CPP_ENGINE", "RUST_FFI", "RUST_PDF", "RUST_BATCH", "RUST_INTELLIGENCE", "TAURI_IPC", "FRONTEND_REACT", "PACKAGING"]
+    },
+    "symptom": {
+      "type": "string",
+      "minLength": 10
+    },
+    "reproduction": {
+      "type": "string",
+      "minLength": 10
+    },
+    "root_cause": {
+      "type": "string",
+      "minLength": 10
+    },
+    "fix": {
+      "type": "string",
+      "minLength": 10
+    },
+    "verification": {
+      "type": "string",
+      "minLength": 10
+    },
+    "regression_test": {
+      "type": "string",
+      "minLength": 5
+    },
+    "generalizable_lesson": {
+      "type": "string",
+      "minLength": 10
+    },
+    "davidstack_proposal": {
+      "type": "object",
+      "properties": {
+        "applicable": { "type": "boolean" },
+        "proposal_id": { "type": "string" },
+        "target_layer": { "type": "string", "enum": ["BANNED_PATTERN", "GATE_CHECK", "VERIFICATION_SKILL", "PLAYBOOK"] },
+        "language": { "type": "string", "enum": ["cpp", "rust", "typescript", "python", "general"] },
+        "pattern": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "required": ["applicable"]
+    }
+  },
+  "required": [
+    "issue_id",
+    "title",
+    "severity",
+    "component",
+    "symptom",
+    "reproduction",
+    "root_cause",
+    "fix",
+    "verification",
+    "regression_test",
+    "generalizable_lesson",
+    "davidstack_proposal"
+  ]
+}

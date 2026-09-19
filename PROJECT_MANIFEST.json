@@ -1,0 +1,24 @@
+{
+  "project": "OCULUS",
+  "organization": "Araskova",
+  "version": "1.0",
+  "documents": [
+    "README.md",
+    "PRD.md",
+    "ARCHITECTURE.md",
+    "API_SPEC.md",
+    "UI_SPEC.md",
+    "IMPLEMENTATION_PLAN.md",
+    "TEST_PLAN.md",
+    "SECURITY.md",
+    "AGENT_RULES.md",
+    "ROADMAP.md",
+    "DECISIONS.md",
+    "AGENT_START_PROMPT.md"
+  ],
+  "architecture": "React/TypeScript -> Tauri -> Rust -> C++ -> AI/DSP/ML",
+  "davidstack": {
+    "status": "pending_until_added_to_project_folder",
+    "instruction": "Inspect and follow DavidStack before construction. Do not fabricate its rules."
+  }
+}

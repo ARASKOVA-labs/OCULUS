@@ -27,3 +27,6 @@ Thumbs.db
 # Logs & Scratch
 *.log
 scratch/
+
+# Tauri generated schemas
+src-tauri/gen/

@@ -1,33 +1,28 @@
-# OCULUS — Local Document Intelligence
+# OCULUS by Araskova
 
 ## Purpose
-OCULUS is an Araskova local-first document intelligence product for OCR, document preprocessing, structured extraction, searchable PDFs, dataset generation, and optional local AI features.
+OCULUS is Araskova's universal PDF toolkit for the desktop: every tool you would reach for on iLovePDF, plus OCR with first-class Malayalam support, running entirely on your machine. No uploads, no file-size caps, no daily limits, no paywall on core tools.
 
 ## Construction rule
-Before writing production code, the implementation agent MUST inspect the project folder for `DavidStack/`, `davidstack/`, or similarly named DavidStack files. DavidStack is a project-local engineering rule stack that will be added later. When present, it is authoritative for product construction quality, engineering workflow, UI quality, testing discipline, and agent behavior unless it conflicts with explicit project requirements or higher-priority system constraints.
-
-Do not invent DavidStack rules if the files are not yet present. If absent, follow this repository's documents and record that DavidStack is pending.
+Before writing production code, read DavidStack (`David-Stack/`) if present. It is authoritative for engineering workflow, UI quality, testing discipline and agent behaviour unless it conflicts with explicit project requirements.
 
 ## Core architecture
-React + TypeScript UI
+React + TypeScript UI (`araskova-doccraft` submodule)
 → Tauri
-→ Rust application layer
-→ C++ native engine
-→ OCR / OpenCV / optional ONNX Runtime
+→ Rust application layer (`src-tauri/`)
+→ C++ native engine (`native/`)
+→ Tesseract / Leptonica / lopdf
 
-## Product principle
-Local-first, privacy-first, fast, accessible, free for core functionality, and capable of running without a cloud backend.
+## Product principles
+- Local-first and private: files never leave the machine.
+- Universal: one app for organise, convert, edit, secure and OCR.
+- Fast on large files and batches.
+- Designed in the Araskova house style (see `docs/superpowers/specs/`).
 
-## Initial scope
-1. Image OCR
-2. PDF OCR
-3. Image preprocessing
-4. Text preview and correction
-5. TXT/Markdown/JSON/JSONL export
-6. Searchable PDF generation
-7. Batch processing
-8. Progress and job management
-9. OCR confidence information where available
-10. English + Malayalam-ready text pipeline
-
-Cloud AI and advanced document intelligence are optional later layers, not dependencies for core OCR.
+## Running
+```bash
+cd araskova-doccraft && bun install && bun run dev --port 5173
+cd src-tauri && cargo run      # debug builds load the dev server
+cd src-tauri && cargo test
+```
+Production bundle: `bun run build` in the submodule, then `cargo tauri build` and `scripts/bundle_macos.py` (see `PACKAGING.md`).

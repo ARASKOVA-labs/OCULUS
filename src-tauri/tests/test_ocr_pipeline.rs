@@ -61,17 +61,6 @@ fn test_malayalam_utf8_preservation_in_models_and_json() {
         deserialized.pages[0].text, mal_text,
         "Malayalam text must roundtrip identically through serde"
     );
-
-    // Verify JSONL line serialization
-    let jsonl_line = serde_json::json!({
-        "document": result.filename,
-        "page": 1,
-        "confidence": result.pages[0].confidence,
-        "language": result.language,
-        "text": result.pages[0].text,
-    });
-    let line_str = serde_json::to_string(&jsonl_line).expect("JSONL serialization");
-    assert!(line_str.contains("പ്രാദേശിക"), "JSONL must preserve Malayalam text");
 }
 
 #[test]

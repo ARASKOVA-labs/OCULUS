@@ -456,3 +456,25 @@ fn test_export_default_destination_never_writes_to_root() {
     let _ = fs::remove_file(path_explicit);
 }
 
+
+#[test]
+fn test_export_rejects_unsupported_format() {
+    let engine = NativeEngine::new(None).expect("Engine init");
+    let target = std::env::temp_dir().join(format!("oculus_unsupported_{}.jsonl", uuid::Uuid::new_v4()));
+    let req = oculus_lib::models::ExportRequest {
+        document_id: "doc-unsupported".to_string(),
+        format: "jsonl".to_string(),
+        result: OcrResult {
+            document_id: "doc-unsupported".to_string(),
+            filename: "scan.png".to_string(),
+            language: "eng".to_string(),
+            pages: vec![],
+            processing_time_ms: 1,
+            warnings: vec![],
+        },
+        destination_path: Some(target.to_string_lossy().into_owned()),
+    };
+    let err = oculus_lib::commands::perform_export(&engine, req).expect_err("jsonl is no longer exported");
+    assert!(err.contains("Unsupported export format"), "got: {err}");
+    assert!(!target.exists(), "nothing may be written for an unsupported format");
+}

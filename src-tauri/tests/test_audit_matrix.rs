@@ -105,23 +105,8 @@ fn test_audit_claim_all_four_export_formats() {
     let parsed: OcrResult = serde_json::from_str(&read_json).expect("Deserialize JSON");
     assert_eq!(parsed.pages[0].text, result.pages[0].text);
 
-    // 4. JSONL Export
-    let jsonl_path = temp_dir.join("audit_export.jsonl");
-    let line_obj = serde_json::json!({
-        "document": result.filename,
-        "page": 1,
-        "confidence": result.pages[0].confidence,
-        "language": result.language,
-        "text": result.pages[0].text
-    });
-    let line_str = serde_json::to_string(&line_obj).expect("Serialize JSONL");
-    fs::write(&jsonl_path, line_str.as_bytes()).expect("Write JSONL");
-    let read_jsonl = fs::read_to_string(&jsonl_path).expect("Read JSONL");
-    assert!(read_jsonl.contains("ഒക്കുലസ്"));
-
     // Cleanup
     let _ = fs::remove_file(txt_path);
     let _ = fs::remove_file(md_path);
     let _ = fs::remove_file(json_path);
-    let _ = fs::remove_file(jsonl_path);
 }

@@ -3,7 +3,7 @@ name = "oculus-desktop"
 version = "0.1.0"
 description = "OCULUS - Local-first document intelligence desktop application"
 authors = ["Araskova"]
-license = "Proprietary"
+license = "FSL-1.1-ALv2"
 edition = "2021"
 
 [lib]

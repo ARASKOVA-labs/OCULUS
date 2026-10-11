@@ -1,7 +1,8 @@
 name: Release
 
-# Tag a version (git tag v0.1.0 && git push origin v0.1.0) to build the macOS installers and open a
-# DRAFT release for review. "Run workflow" builds without publishing, which is a dry run.
+# Tag a version (git tag v0.1.0 && git push origin v0.1.0) to build the macOS and Windows installers
+# and open a DRAFT release for review. "Run workflow" builds without publishing, which is a dry run.
+# The Windows build is best-effort: if it fails, the macOS release still goes out.
 on:
   push:
     tags: ["v*"]
@@ -11,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-macos:
     name: macOS ${{ matrix.arch }}
     strategy:
       fail-fast: false
@@ -97,21 +98,157 @@ jobs:
           path: dist-release/*
           if-no-files-found: error
 
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+    # A Windows failure must never block the macOS release.
+    continue-on-error: true
+    timeout-minutes: 90
+    env:
+      # Optional Authenticode signing; without the secrets the installer is unsigned (SmartScreen warns).
+      HAVE_WIN_SIGNING: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+      # Static Tesseract/Leptonica from the runner's preinstalled vcpkg (see src-tauri/build.rs).
+      VCPKGRS_TRIPLET: x64-windows-static-md
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
+      RUST_BACKTRACE: "1"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN }}
+
+      - name: Tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME != tauri.conf.json version v$version" }
+
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-tesseract-${{ runner.os }}-x64-windows-static-md-${{ hashFiles('.github/workflows/release.yml') }}
+          restore-keys: |
+            vcpkg-tesseract-${{ runner.os }}-x64-windows-static-md-
+
+      - name: Native dependencies (vcpkg tesseract, static)
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\vcpkg-cache" | Out-Null
+          # The runner image ships vcpkg at C:\vcpkg (VCPKG_INSTALLATION_ROOT); build.rs finds it through VCPKG_ROOT.
+          $root = if ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT } else { 'C:\vcpkg' }
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          $env:VCPKG_ROOT = $root
+          Write-Host "vcpkg root: $env:VCPKG_ROOT"
+          # [core] = Tesseract library only (no training tools, which pull in pango/ICU and take very long).
+          & "$env:VCPKG_ROOT\vcpkg.exe" install "tesseract[core]:x64-windows-static-md" --clean-after-build
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed ($LASTEXITCODE)" }
+          Get-ChildItem "$env:VCPKG_ROOT\installed\x64-windows-static-md\lib" -Filter *.lib | ForEach-Object Name
+
+      - name: UI dependencies and tests
+        working-directory: araskova-doccraft
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+
+      # Informational on Windows: some integration tests rasterise PDFs, which Windows does not support yet.
+      - name: Rust tests
+        continue-on-error: true
+        env:
+          TESSDATA_PREFIX: ${{ github.workspace }}\tessdata
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast -- --test-threads=1
+
+      - name: Build the installer
+        run: scripts/release_windows.ps1
+
+      - name: Sign the installer
+        if: env.HAVE_WIN_SIGNING == 'true'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          try {
+            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+              Sort-Object FullName -Descending | Select-Object -First 1
+            if (-not $signtool) { throw 'signtool.exe not found' }
+            $exe = (Get-ChildItem dist-release\*-setup.exe).FullName
+            & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /tr http://timestamp.digicert.com /td SHA256 $exe
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign failed ($LASTEXITCODE)" }
+            & $signtool.FullName verify /pa $exe
+            $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+            [IO.File]::WriteAllText("$exe.sha256", "$hash  $(Split-Path $exe -Leaf)`n")
+          } finally {
+            Remove-Item $pfx -Force -ErrorAction SilentlyContinue
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oculus-windows-x64
+          path: dist-release/*
+          if-no-files-found: error
+
+      - name: Collect build logs
+        if: failure()
+        run: |
+          New-Item -ItemType Directory -Force -Path build-logs/vcpkg, build-logs/cargo | Out-Null
+          Get-ChildItem "$env:VCPKG_ROOT\buildtrees" -Recurse -Filter *.log -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName ("build-logs/vcpkg/" + $_.Directory.Name + "-" + $_.Name) -ErrorAction SilentlyContinue }
+          Get-ChildItem target -Recurse -Include output, stderr -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'build\\oculus-desktop' } |
+            ForEach-Object { Copy-Item $_.FullName ("build-logs/cargo/" + $_.Directory.Name + "-" + $_.Name) -ErrorAction SilentlyContinue }
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-logs
+          path: build-logs/
+          if-no-files-found: ignore
+
   publish:
     name: Draft release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-macos, build-windows]
+    # Runs when macOS built, even if the (best-effort) Windows build failed or was skipped.
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: oculus-macos-*
+          pattern: oculus-*
           merge-multiple: true
           path: dist
+      - name: Release notes
+        run: |
+          ls -l dist
+          if ls dist/*-setup.exe >/dev/null 2>&1; then
+            cat > release-notes.md <<'EOF'
+          ## Windows
+          The Windows installer (`*_x64-setup.exe`) does not support OCR of scanned PDF pages yet. That needs the macOS build for now.
+          Image OCR (PNG, JPG, TIFF) and all the PDF tools (merge, split, compress, convert and more) work on Windows.
+          The installer is not code-signed unless stated otherwise: Windows SmartScreen may warn, choose "More info", then "Run anyway".
+          EOF
+          else
+            cat > release-notes.md <<'EOF'
+          ## Windows
+          The Windows build did not complete for this tag, so this release has macOS installers only. See the workflow run's build logs.
+          EOF
+          fi
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
           generate_release_notes: true
+          body_path: release-notes.md
           files: dist/*

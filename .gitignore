@@ -30,3 +30,6 @@ scratch/
 
 # Tauri generated schemas
 src-tauri/gen/
+
+# Release output
+dist-release/

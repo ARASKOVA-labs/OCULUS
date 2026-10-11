@@ -1,13 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <filter id="bloom" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="1.4"/>
+      <feGaussianBlur stdDeviation="12"/>
     </filter>
   </defs>
-  <rect width="1024" height="1024" fill="#0A0A0B"/>
-  <!-- chevron path lives in a 32x24 box; scale 19.2 puts it at ~60% width (614px), centred -->
-  <g transform="translate(205 281.6) scale(19.2)" fill="none" stroke="#FF4D12" stroke-width="4" stroke-linecap="butt" stroke-linejoin="miter">
-    <path d="M3 22 L14 4.5 Q16 1.5 18 4.5 L29 22" opacity="0.35" filter="url(#bloom)"/>
-    <path d="M3 22 L14 4.5 Q16 1.5 18 4.5 L29 22"/>
+  <!-- macOS icon grid: 824px rounded body (r 185) inside the 1024 canvas -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0A0A0B"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="184.5" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+  <!-- Rephen O glyph (font units, y up), scale 0.5, centred -->
+  <g transform="translate(191.25 664.75) scale(0.5 -0.5)" fill="#FF4D12">
+    <path d="M882 96Q940 96 987.5 124.5Q1035 153 1063.5 200.5Q1092 248 1092 306Q1092 363 1063.5 411.0Q1035 459 987.5 487.5Q940 516 882 516H401Q343 516 295.5 487.5Q248 459 219.5 411.0Q191 363 191 306Q191 248 219.5 200.5Q248 153 295.5 124.5Q343 96 401 96ZM882 0H401Q338 0 282.5 24.0Q227 48 185.0 90.0Q143 132 119.0 187.5Q95 243 95 306Q95 369 119.0 424.5Q143 480 185.0 522.0Q227 564 282.5 587.5Q338 611 401 611H882Q945 611 1000.5 587.5Q1056 564 1098.0 522.0Q1140 480 1164.0 424.5Q1188 369 1188 306Q1188 243 1164.0 187.5Q1140 132 1098.0 90.0Q1056 48 1000.5 24.0Q945 0 882 0Z" opacity="0.35" filter="url(#bloom)"/>
+    <path d="M882 96Q940 96 987.5 124.5Q1035 153 1063.5 200.5Q1092 248 1092 306Q1092 363 1063.5 411.0Q1035 459 987.5 487.5Q940 516 882 516H401Q343 516 295.5 487.5Q248 459 219.5 411.0Q191 363 191 306Q191 248 219.5 200.5Q248 153 295.5 124.5Q343 96 401 96ZM882 0H401Q338 0 282.5 24.0Q227 48 185.0 90.0Q143 132 119.0 187.5Q95 243 95 306Q95 369 119.0 424.5Q143 480 185.0 522.0Q227 564 282.5 587.5Q338 611 401 611H882Q945 611 1000.5 587.5Q1056 564 1098.0 522.0Q1140 480 1164.0 424.5Q1188 369 1188 306Q1188 243 1164.0 187.5Q1140 132 1098.0 90.0Q1056 48 1000.5 24.0Q945 0 882 0Z"/>
   </g>
 </svg>

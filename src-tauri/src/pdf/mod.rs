@@ -1,4 +1,4 @@
-use crate::ffi::NativeEngine;
+use crate::ffi::{NativeEngine, PDF_RASTER_UNSUPPORTED};
 use crate::models::{BoundingBox, OcrBlock, OcrPage, OcrResult, PreprocessOptions};
 use lopdf::Document;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -150,6 +150,10 @@ impl PdfPipeline {
         }
 
         let mut pages = Vec::with_capacity(total_pages as usize);
+        // Pages that need OCR but cannot be rasterised because this platform has no PDF engine
+        // (Windows). Never happens on macOS.
+        let mut unsupported_pages: u32 = 0;
+        let mut readable_pages: u32 = 0;
 
         for (idx, &page_id) in page_numbers.iter().enumerate() {
             let page_idx = (idx + 1) as u32;
@@ -191,6 +195,7 @@ impl PdfPipeline {
                     }
                 }
 
+                readable_pages += 1;
                 pages.push(OcrPage {
                     page: page_idx,
                     text: clean_text,
@@ -203,6 +208,16 @@ impl PdfPipeline {
 
                 let rendered_png = match NativeEngine::render_pdf_page(pdf_bytes, page_idx, 300) {
                     Ok(png) => png,
+                    Err(e) if e == PDF_RASTER_UNSUPPORTED => {
+                        unsupported_pages += 1;
+                        pages.push(OcrPage {
+                            page: page_idx,
+                            text: format!("[Page {} is a scan and was not read: OCR for PDF pages is not available on this platform yet]", page_idx),
+                            blocks: Vec::new(),
+                            confidence: 0.0,
+                        });
+                        continue;
+                    }
                     Err(e) => {
                         warnings.push(format!("Page {}: rasterization failed: {}", page_idx, e));
                         pages.push(OcrPage {
@@ -242,6 +257,7 @@ impl PdfPipeline {
 
                 if let Some(mut first_page) = page_ocr.pages.into_iter().next() {
                     first_page.page = page_idx;
+                    readable_pages += 1;
                     pages.push(first_page);
                 } else {
                     warnings.push(format!("Page {}: No text detected by OCR engine", page_idx));
@@ -253,6 +269,18 @@ impl PdfPipeline {
                     });
                 }
             }
+        }
+
+        if unsupported_pages > 0 {
+            if readable_pages == 0 {
+                // Nothing could be read at all: report the reason instead of a "successful"
+                // result made only of placeholders.
+                return Err(PDF_RASTER_UNSUPPORTED.to_string());
+            }
+            warnings.push(format!(
+                "{} scanned page(s) were skipped. {}",
+                unsupported_pages, PDF_RASTER_UNSUPPORTED
+            ));
         }
 
         let elapsed_ms = start_time.elapsed().as_millis() as u64;

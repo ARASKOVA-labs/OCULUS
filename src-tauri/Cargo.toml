@@ -15,6 +15,10 @@ tauri-build = { version = "2", features = [] }
 cc = "1.0"
 pkg-config = "0.3"
 
+# Windows only: locate vcpkg-built static Tesseract/Leptonica (see build.rs).
+[target.'cfg(windows)'.build-dependencies]
+vcpkg = "0.2"
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"

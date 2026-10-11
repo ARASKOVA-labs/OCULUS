@@ -71,7 +71,12 @@ int32_t oculus_engine_ocr(
     OculusResult** out_result
 );
 
-/* PDF Operations */
+/* PDF Operations
+ *
+ * Page counting and page rasterisation use macOS CoreGraphics. On other platforms both return
+ * OCULUS_ERR_UNSUPPORTED (-9) so callers can tell "not supported here" apart from "invalid PDF".
+ */
+#define OCULUS_ERR_UNSUPPORTED (-9)
 int32_t oculus_engine_pdf_page_count(const uint8_t* pdf_data, size_t pdf_size);
 int32_t oculus_engine_render_pdf_page(
     const uint8_t* pdf_data,

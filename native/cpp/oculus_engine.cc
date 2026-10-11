@@ -1,6 +1,9 @@
 #include "oculus_engine.h"
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -442,7 +445,8 @@ int32_t oculus_engine_pdf_page_count(const uint8_t* pdf_data, size_t pdf_size) {
         CGPDFDocumentRelease(doc);
         return static_cast<int32_t>(count);
 #else
-        return -1;
+        // No PDF engine on this platform yet (Windows/Linux): -9 = "not supported", not "bad PDF".
+        return -9;
 #endif
     } catch (...) {
         return -1;

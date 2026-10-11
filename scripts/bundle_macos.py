@@ -16,6 +16,10 @@ import re
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Ad-hoc signature by default; set APPLE_SIGNING_IDENTITY (a Developer ID) for a distributable signature.
+SIGN_ID = os.environ.get("APPLE_SIGNING_IDENTITY", "-")
+# A Developer ID signature needs the hardened runtime and a secure timestamp to be notarised.
+SIGN_ARGS = [] if SIGN_ID == "-" else ["--options", "runtime", "--timestamp"]
 
 def run_cmd(cmd, check=True):
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -70,19 +74,19 @@ def trace_all_homebrew_deps(root_dylibs):
 
     return homebrew_libs
 
-def bundle_application(source_executable, output_dir):
+def bundle_application(source_executable, output_dir, existing_app=None):
     print("=== OCULUS STANDALONE MACOS BUNDLER ===")
     print(f"Source executable: {source_executable}")
     print(f"Output directory:  {output_dir}")
 
-    app_dir = output_dir / "Oculus.app"
+    app_dir = Path(existing_app) if existing_app else output_dir / "Oculus.app"
     contents_dir = app_dir / "Contents"
     macos_dir = contents_dir / "MacOS"
     frameworks_dir = contents_dir / "Frameworks"
     resources_dir = contents_dir / "Resources"
     tessdata_dir = resources_dir / "tessdata"
 
-    if app_dir.exists():
+    if app_dir.exists() and not existing_app:
         shutil.rmtree(app_dir)
 
     macos_dir.mkdir(parents=True, exist_ok=True)
@@ -116,11 +120,13 @@ def bundle_application(source_executable, output_dir):
 </dict>
 </plist>
 """
-    info_plist_path.write_text(info_plist_content, encoding="utf-8")
+    if not existing_app:  # a Tauri-built .app already carries its own Info.plist and icon
+        info_plist_path.write_text(info_plist_content, encoding="utf-8")
 
     # 1. Copy executable
     target_exec = macos_dir / "oculus-desktop"
-    shutil.copy2(source_executable, target_exec)
+    if Path(source_executable).resolve() != target_exec.resolve():
+        shutil.copy2(source_executable, target_exec)
     os.chmod(target_exec, 0o755)
     print(f"[1/6] Copied executable -> {target_exec}")
 
@@ -196,8 +202,10 @@ def bundle_application(source_executable, output_dir):
     # 7. Ad-hoc code sign all dylibs and executable
     print("Code signing bundled artifacts with ad-hoc signature...")
     for dylib_path in frameworks_dir.glob("*.dylib"):
-        run_cmd(['codesign', '-f', '-s', '-', str(dylib_path)])
-    run_cmd(['codesign', '-f', '-s', '-', str(target_exec)])
+        run_cmd(['codesign', '-f', *SIGN_ARGS, '-s', SIGN_ID, str(dylib_path)])
+    run_cmd(['codesign', '-f', *SIGN_ARGS, '-s', SIGN_ID, str(target_exec)])
+    if existing_app:  # seal the whole bundle so the signature covers Info.plist and resources
+        run_cmd(['codesign', '-f', '--deep', *SIGN_ARGS, '-s', SIGN_ID, str(app_dir)])
 
     # 8. Verification: Check for any remaining forbidden paths
     print("\n--- DEPENDENCY VERIFICATION AUDIT ---")
@@ -233,9 +241,16 @@ if __name__ == "__main__":
         src = PROJECT_ROOT / "src-tauri" / "target" / "debug" / "oculus-desktop"
     
     out = PROJECT_ROOT / "dist-standalone"
-    if len(sys.argv) > 1:
-        src = Path(sys.argv[1])
-    if len(sys.argv) > 2:
-        out = Path(sys.argv[2])
+    existing = None
+    if len(sys.argv) > 2 and sys.argv[1] == "--app":
+        # usage: bundle_macos.py --app path/to/OCULUS.app  (relocate dylibs into an existing bundle)
+        existing = Path(sys.argv[2])
+        src = existing / "Contents" / "MacOS" / "oculus-desktop"
+        out = existing.parent
+    else:
+        if len(sys.argv) > 1:
+            src = Path(sys.argv[1])
+        if len(sys.argv) > 2:
+            out = Path(sys.argv[2])
 
-    bundle_application(src, out)
+    bundle_application(src, out, existing)

@@ -455,24 +455,6 @@ pub fn perform_export(
         }
         "json" => serde_json::to_string_pretty(&req.result)
             .map_err(|e| format!("Failed to serialize result: {}", e))?,
-        "jsonl" => {
-            let mut lines = Vec::new();
-            for page in &req.result.pages {
-                let obj = serde_json::json!({
-                    "document": req.result.filename,
-                    "document_id": req.result.document_id,
-                    "page": page.page,
-                    "confidence": page.confidence,
-                    "language": req.result.language,
-                    "text": page.text,
-                    "quality": if page.confidence > 80.0 { "high" } else if page.confidence > 50.0 { "medium" } else { "low" },
-                });
-                lines.push(
-                    serde_json::to_string(&obj).map_err(|e| format!("JSON line error: {}", e))?,
-                );
-            }
-            lines.join("\n")
-        }
         _ => return Err(format!("Unsupported export format: {}", req.format)),
     };
 

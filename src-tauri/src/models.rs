@@ -81,7 +81,7 @@ pub struct JobProgress {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ExportRequest {
     pub document_id: String,
-    pub format: String, // "txt", "md", "json", "jsonl"
+    pub format: String, // "txt", "md", "json", "pdf"
     pub result: OcrResult,
     pub destination_path: Option<String>,
 }

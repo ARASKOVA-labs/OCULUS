@@ -3,6 +3,14 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::sync::Arc;
 
+/// Return code of the native PDF entry points where the platform has no PDF engine
+/// (everything except macOS CoreGraphics). Mirrors `OCULUS_ERR_UNSUPPORTED` in `oculus_engine.h`.
+const OCULUS_ERR_UNSUPPORTED: c_int = -9;
+
+/// User-facing message for "this platform cannot render PDF pages yet". The UI shows native error
+/// strings as they are, so this must read well on its own. Compare with `==` to detect it.
+pub const PDF_RASTER_UNSUPPORTED: &str = "Scanned PDFs cannot be read with OCR in the Windows version of OCULUS yet, because it cannot turn PDF pages into images here. OCR for images (PNG, JPG, TIFF) and all the PDF tools work normally. To read a scanned PDF, convert it with PDF to JPG and run OCR on the images, or use the macOS version.";
+
 #[repr(C)]
 struct OculusEngineOpaque {
     _unused: [u8; 0],
@@ -139,6 +147,10 @@ impl NativeEngine {
                     candidates.push(exe_dir.join("tessdata"));
                     candidates.push(exe_dir.join("../Resources/tessdata"));
                     candidates.push(exe_dir.join("../Resources"));
+                    // Windows installer layout is `<install dir>\tessdata` (the first candidate
+                    // above); keep Tauri's `resources` sub-folder as a fallback.
+                    #[cfg(windows)]
+                    candidates.push(exe_dir.join("resources").join("tessdata"));
                 }
             }
             // Standard OS distribution locations
@@ -146,6 +158,15 @@ impl NativeEngine {
             candidates.push(std::path::PathBuf::from("/usr/local/share/tessdata"));
             candidates.push(std::path::PathBuf::from("/usr/share/tesseract-ocr/5/tessdata"));
             candidates.push(std::path::PathBuf::from("/usr/share/tessdata"));
+            // A system-wide Tesseract install on Windows (only used when no bundled data exists).
+            #[cfg(windows)]
+            {
+                for var in ["ProgramFiles", "ProgramFiles(x86)"] {
+                    if let Some(base) = std::env::var_os(var) {
+                        candidates.push(std::path::PathBuf::from(base).join("Tesseract-OCR").join("tessdata"));
+                    }
+                }
+            }
 
             candidates
                 .into_iter()
@@ -329,6 +350,14 @@ impl NativeEngine {
         let count = unsafe {
             oculus_engine_pdf_page_count(pdf_bytes.as_ptr(), pdf_bytes.len())
         };
+        if count == OCULUS_ERR_UNSUPPORTED {
+            // No native PDF engine on this platform: count pages with the pure-Rust parser
+            // instead, so document inspection still reports a real page count.
+            return match lopdf::Document::load_mem(pdf_bytes) {
+                Ok(doc) => Ok(doc.get_pages().len() as u32),
+                Err(_) => Err("Failed to parse PDF pages".to_string()),
+            };
+        }
         if count < 0 {
             Err("Failed to parse PDF pages".to_string())
         } else {
@@ -355,6 +384,9 @@ impl NativeEngine {
             )
         };
 
+        if rc == OCULUS_ERR_UNSUPPORTED {
+            return Err(PDF_RASTER_UNSUPPORTED.to_string());
+        }
         if rc != 0 || out_ptr.is_null() {
             return Err(format!("PDF page rendering failed with code {}", rc));
         }

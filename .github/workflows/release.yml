@@ -42,6 +42,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     env:
+      # The tests read the repo's language data (Homebrew's tesseract has English only, no Malayalam).
+      TESSDATA_PREFIX: ${{ github.workspace }}/tessdata
       # Signing and notarisation are optional: without the Apple secrets the build is ad-hoc signed.
       HAVE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' }}
       HAVE_NOTARY: ${{ secrets.APPLE_ID != '' }}

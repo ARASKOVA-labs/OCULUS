@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ARASKOVA-labs/OCULUS/actions/workflows/ci.yml"><img src="https://github.com/ARASKOVA-labs/OCULUS/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/ARASKOVA-labs/OCULUS/actions/workflows/release.yml"><img src="https://github.com/ARASKOVA-labs/OCULUS/actions/workflows/release.yml/badge.svg?branch=main" alt="Build status"></a>
   <a href="https://github.com/ARASKOVA-labs/OCULUS/releases"><img src="https://img.shields.io/github/v/release/ARASKOVA-labs/OCULUS?include_prereleases&label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0-blue" alt="Licence: AGPL-3.0"></a>
   <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-lightgrey" alt="Platforms: macOS, Windows, Linux">
@@ -96,8 +96,9 @@ cd OCULUS
 | Installer for your system | see [RELEASING.md](RELEASING.md) |
 
 Every pull request runs the same checks on macOS, Windows and Linux in
-[GitHub Actions](.github/workflows/ci.yml). Tagging `vX.Y.Z` builds the installers for all three
-and drafts a release.
+[GitHub Actions](.github/workflows/ci.yml). Every push to `main` runs them again, builds the
+installers for all three and publishes them as a pre-release
+([release.yml](.github/workflows/release.yml)); tagging `vX.Y.Z` drafts a versioned release.
 
 ## How it is built
 

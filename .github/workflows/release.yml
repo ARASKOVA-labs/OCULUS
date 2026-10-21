@@ -1,12 +1,29 @@
 name: Release
 
-# Tag a version (git tag v0.1.0 && git push origin v0.1.0) to build the macOS, Windows and Linux installers
-# and open a DRAFT release for review. "Run workflow" builds without publishing, which is a dry run.
+# Builds the macOS, Windows and Linux installers, after the UI and Rust tests pass on each system.
+#  - Every push to main publishes them as a pre-release, "OCULUS <version> build <n>" (tag
+#    v<version>-build.<n>), so the latest main can always be downloaded. Only the newest few build
+#    pre-releases are kept.
+#  - A version tag (git tag v0.2.0 && git push origin v0.2.0) opens a DRAFT release for review.
+#  - "Run workflow" builds without publishing, which is a dry run.
 # The Windows and Linux builds are best-effort: if one fails, the macOS release still goes out.
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+    # changes that cannot affect the app do not rebuild it
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/pull_request_template.md"
   workflow_dispatch:
+
+# A newer push to main replaces a build still running for an older one; tag builds always finish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -267,6 +284,7 @@ jobs:
         working-directory: araskova-doccraft
         run: |
           bun install --frozen-lockfile
+          bun run lint
           bun run test
 
       # PDF page rendering is macOS-only for now, so the tests that need it are #[ignore]d here.
@@ -283,14 +301,37 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Draft release
+    name: Publish
     needs: [build-macos, build-windows, build-linux]
     # Runs when macOS built, even if the (best-effort) Windows or Linux build failed or was skipped.
-    if: ${{ !cancelled() && needs.build-macos.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ !cancelled() && needs.build-macos.result == 'success' && github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: src-tauri/tauri.conf.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Release name
+        id: rel
+        run: |
+          VERSION="$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "name=OCULUS ${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v${VERSION}-build.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "name=OCULUS ${VERSION} build ${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: oculus-*
@@ -300,6 +341,13 @@ jobs:
         run: |
           ls -l dist
           : > release-notes.md
+          if [ "${{ steps.rel.outputs.build }}" = "true" ]; then
+            cat >> release-notes.md <<EOF
+          Automatic build of \`main\` at ${GITHUB_SHA::7}. It passed the interface and Rust tests, but it is a
+          pre-release: for everyday use, take the newest release without "build" in its name.
+
+          EOF
+          fi
           if ls dist/*-setup.exe >/dev/null 2>&1; then
             cat >> release-notes.md <<'EOF'
           ## Windows
@@ -329,7 +377,20 @@ jobs:
           fi
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          draft: true
-          generate_release_notes: true
+          tag_name: ${{ steps.rel.outputs.tag }}
+          name: ${{ steps.rel.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          draft: ${{ steps.rel.outputs.build != 'true' }}
+          prerelease: ${{ steps.rel.outputs.build == 'true' }}
+          make_latest: ${{ steps.rel.outputs.build == 'true' && 'false' || 'true' }}
+          generate_release_notes: ${{ steps.rel.outputs.build != 'true' }}
           body_path: release-notes.md
           files: dist/*
+
+      # Keep the five newest build pre-releases (and their tags); version releases are never touched.
+      - name: Remove older builds
+        if: steps.rel.outputs.build == 'true'
+        run: |
+          gh release list --limit 100 --json tagName,isPrerelease,createdAt \
+            --jq '[.[] | select(.isPrerelease and (.tagName | test("-build\\.[0-9]+$")))] | sort_by(.createdAt) | reverse | .[5:] | .[].tagName' |
+            while read -r tag; do gh release delete "$tag" --yes --cleanup-tag; done

@@ -5,6 +5,15 @@ and Linux packages (see the Windows and Linux sections below). Each macOS instal
 self-contained: the Tesseract and Leptonica libraries and the English, Malayalam and
 orientation language data are inside the app, so it runs on a clean Mac.
 
+## Builds of every push to main
+
+Every push to `main` that touches the app (not only Markdown, `docs/` or issue templates) runs the
+**Release** workflow: the UI and Rust tests on macOS, Windows and Linux, then the installers for all
+three. They are published as a **pre-release** named `OCULUS <version> build <n>` (tag
+`v<version>-build.<n>`), so the newest `main` can always be downloaded from
+[Releases](https://github.com/ARASKOVA-labs/OCULUS/releases). Pre-releases are never marked
+"latest", only the five newest builds are kept, and a newer push cancels a build still running.
+
 ## Cut a release
 
 1. Set the version in `src-tauri/tauri.conf.json` (and `src-tauri/Cargo.toml`).
@@ -129,8 +138,8 @@ to check the Linux build; only the x64 packages are released.
 
 ## Continuous integration
 
-The **CI** workflow (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests;
-a newer push cancels the older run. It runs:
+The **CI** workflow (`.github/workflows/ci.yml`) runs on pull requests (pushes to `main` are tested
+by the Release workflow above); a newer push cancels the older run. It runs:
 
 - **UI** (Linux): `bun install --frozen-lockfile`, lint, the UI tests, and the static desktop build.
 - **Native** (macOS, Ubuntu 22.04 and Windows): the Rust and C++ build, then `cargo test`, with

@@ -1,11 +1,11 @@
 name: CI
 
-# Runs on every push to main and on pull requests: the UI checks on Linux, and the native (Rust + C++)
-# build and tests on macOS, Linux and Windows. A newer push to the same branch or PR cancels the older run.
+# Runs on pull requests: the UI checks on Linux, and the native (Rust + C++) build and tests on macOS,
+# Linux and Windows. Pushes to main are tested by the Release workflow, which runs the same tests
+# before it builds the installers. A newer push to the same PR cancels the older run.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

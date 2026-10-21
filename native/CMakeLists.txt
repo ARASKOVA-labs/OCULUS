@@ -24,8 +24,10 @@ if(TESSERACT_FOUND AND LEPTONICA_FOUND)
     target_link_directories(oculus_native PUBLIC
         ${TESSERACT_LIBRARY_DIRS}
         ${LEPTONICA_LIBRARY_DIRS}
-        /opt/homebrew/lib
     )
+    if(APPLE AND EXISTS /opt/homebrew/lib)
+        target_link_directories(oculus_native PUBLIC /opt/homebrew/lib)
+    endif()
     target_link_libraries(oculus_native PUBLIC
         ${TESSERACT_LIBRARIES}
         ${LEPTONICA_LIBRARIES}

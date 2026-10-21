@@ -1,7 +1,7 @@
 # Trademarks
 
-The code is licensed under [FSL-1.1-ALv2](LICENSE). The licence does not grant rights to Araskova's
-names or marks:
+The code is licensed under the [GNU AGPL-3.0](LICENSE). The licence does not grant rights to
+Araskova's names or marks:
 
 - **Araskova**, **OCULUS**
 - the **Rephen O** logo and the Rephen typeface

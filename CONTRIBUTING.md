@@ -19,6 +19,22 @@ change easy to accept.
   the approach before you spend time on it.
 - Small fixes (typos, bugs, tests, docs) can go straight to a pull request.
 
+## Where things live
+
+| Path | What it is |
+|---|---|
+| `araskova-doccraft/` | The interface (React + TypeScript, a git submodule) |
+| `araskova-doccraft/src/lib/convert/` | The document converters: ZIP, Word, Excel, PowerPoint, EPUB/MOBI readers and writers, PDF layout, PDF → Word/PowerPoint/Excel |
+| `araskova-doccraft/src/lib/scan/` | Scanner filters (deskew, shadows, threshold), run in a Web Worker |
+| `araskova-doccraft/src/components/` | Screens: `home/`, `workspace/` (tool pages and previews), `panels/` (OCR, extract), `scanner/`, `shell/` |
+| `src-tauri/src/commands/` | The IPC commands the interface calls, and `guard.rs`, which checks their input |
+| `src-tauri/src/{batch,pdf,intelligence,ffi}/` | Batch OCR, the PDF pipeline, table and field detection, the C++ boundary |
+| `native/` | The C++ engine (Tesseract + Leptonica, page rendering on macOS) |
+| `tessdata/` | OCR language data shipped with the app |
+| `test_samples/` | Documents the Rust tests read |
+| `scripts/` | Release scripts for macOS, Windows and Linux |
+| `.github/` | CI, the release workflow, issue and pull request templates |
+
 ## Set up
 
 You need Rust, [Bun](https://bun.sh), and Tesseract and Leptonica (`brew install tesseract leptonica
@@ -58,7 +74,8 @@ cd ../src-tauri && cargo test
 - No `TODO` markers left in merged code.
 - Files stay under about 300 lines; split by responsibility.
 - Rust: `cargo fmt`, no new Clippy warnings, no `unsafe` outside the C++ boundary
-  (`src-tauri/src/ffi`), and validate every path that comes from the UI.
+  (`src-tauri/src/ffi`), and pass every path and id that comes from the UI through
+  `src-tauri/src/commands/guard.rs`.
 - Never log document contents.
 - Do not edit the engine files in `araskova-doccraft/src/lib/` (`converter-engine.ts`,
   `pdf-tools-engine.ts`, `tauri-bridge.ts`) without discussing it first; many tools depend on them.
@@ -97,4 +114,4 @@ share them.
 ## License of contributions
 
 By contributing you agree that your contribution is licensed under the same terms as the project
-([FSL-1.1-ALv2](LICENSE)). You keep your copyright.
+([AGPL-3.0-only](LICENSE)). You keep your copyright.

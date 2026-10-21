@@ -9,7 +9,7 @@ const OCULUS_ERR_UNSUPPORTED: c_int = -9;
 
 /// User-facing message for "this platform cannot render PDF pages yet". The UI shows native error
 /// strings as they are, so this must read well on its own. Compare with `==` to detect it.
-pub const PDF_RASTER_UNSUPPORTED: &str = "Scanned PDFs cannot be read with OCR in the Windows version of OCULUS yet, because it cannot turn PDF pages into images here. OCR for images (PNG, JPG, TIFF) and all the PDF tools work normally. To read a scanned PDF, convert it with PDF to JPG and run OCR on the images, or use the macOS version.";
+pub const PDF_RASTER_UNSUPPORTED: &str = "Scanned PDFs cannot be read with OCR in the Windows and Linux versions of OCULUS yet, because it cannot turn PDF pages into images here. OCR for images (PNG, JPG, TIFF) and all the PDF tools work normally. To read a scanned PDF, convert it with PDF to JPG and run OCR on the images, or use the macOS version.";
 
 #[repr(C)]
 struct OculusEngineOpaque {
@@ -151,19 +151,32 @@ impl NativeEngine {
                     // above); keep Tauri's `resources` sub-folder as a fallback.
                     #[cfg(windows)]
                     candidates.push(exe_dir.join("resources").join("tessdata"));
+                    // Linux packages (.deb, AppImage) put Tauri resources in `<prefix>/lib/<productName>/`,
+                    // next to `<prefix>/bin/oculus-desktop`.
+                    #[cfg(target_os = "linux")]
+                    candidates.push(exe_dir.join("../lib/OCULUS/tessdata"));
                 }
             }
             // Standard OS distribution locations
             candidates.push(std::path::PathBuf::from("/opt/homebrew/share/tessdata"));
             candidates.push(std::path::PathBuf::from("/usr/local/share/tessdata"));
-            candidates.push(std::path::PathBuf::from("/usr/share/tesseract-ocr/5/tessdata"));
+            candidates.push(std::path::PathBuf::from(
+                "/usr/share/tesseract-ocr/5/tessdata",
+            ));
+            candidates.push(std::path::PathBuf::from(
+                "/usr/share/tesseract-ocr/4.00/tessdata",
+            ));
             candidates.push(std::path::PathBuf::from("/usr/share/tessdata"));
             // A system-wide Tesseract install on Windows (only used when no bundled data exists).
             #[cfg(windows)]
             {
                 for var in ["ProgramFiles", "ProgramFiles(x86)"] {
                     if let Some(base) = std::env::var_os(var) {
-                        candidates.push(std::path::PathBuf::from(base).join("Tesseract-OCR").join("tessdata"));
+                        candidates.push(
+                            std::path::PathBuf::from(base)
+                                .join("Tesseract-OCR")
+                                .join("tessdata"),
+                        );
                     }
                 }
             }
@@ -175,7 +188,9 @@ impl NativeEngine {
         };
 
         let prefix_cstr = match resolved_path {
-            Some(ref p) => Some(CString::new(p.as_str()).map_err(|e| format!("Invalid path: {}", e))?),
+            Some(ref p) => {
+                Some(CString::new(p.as_str()).map_err(|e| format!("Invalid path: {}", e))?)
+            }
             None => None,
         };
 
@@ -245,7 +260,8 @@ impl NativeEngine {
             return Err("Cannot perform OCR on empty image buffer".to_string());
         }
 
-        let lang_cstr = CString::new(language).map_err(|e| format!("Invalid language string: {}", e))?;
+        let lang_cstr =
+            CString::new(language).map_err(|e| format!("Invalid language string: {}", e))?;
         let c_opts = OculusPreprocessOptionsC::from(options);
         let mut result_ptr: *mut OculusResultC = std::ptr::null_mut();
 
@@ -285,9 +301,7 @@ impl NativeEngine {
                 let page_slice = std::slice::from_raw_parts(res.pages, res.page_count);
                 for p in page_slice {
                     let page_text = if !p.full_text.is_null() {
-                        CStr::from_ptr(p.full_text)
-                            .to_string_lossy()
-                            .into_owned()
+                        CStr::from_ptr(p.full_text).to_string_lossy().into_owned()
                     } else {
                         String::new()
                     };
@@ -297,9 +311,7 @@ impl NativeEngine {
                         let block_slice = std::slice::from_raw_parts(p.blocks, p.block_count);
                         for b in block_slice {
                             let text = if !b.text.is_null() {
-                                CStr::from_ptr(b.text)
-                                    .to_string_lossy()
-                                    .into_owned()
+                                CStr::from_ptr(b.text).to_string_lossy().into_owned()
                             } else {
                                 String::new()
                             };
@@ -347,9 +359,7 @@ impl NativeEngine {
         if pdf_bytes.is_empty() {
             return Err("Empty PDF buffer".to_string());
         }
-        let count = unsafe {
-            oculus_engine_pdf_page_count(pdf_bytes.as_ptr(), pdf_bytes.len())
-        };
+        let count = unsafe { oculus_engine_pdf_page_count(pdf_bytes.as_ptr(), pdf_bytes.len()) };
         if count == OCULUS_ERR_UNSUPPORTED {
             // No native PDF engine on this platform: count pages with the pure-Rust parser
             // instead, so document inspection still reports a real page count.
@@ -366,7 +376,11 @@ impl NativeEngine {
     }
 
     /// Render a single PDF page to a PNG bitmap buffer at target DPI.
-    pub fn render_pdf_page(pdf_bytes: &[u8], page_number: u32, dpi: u32) -> Result<Vec<u8>, String> {
+    pub fn render_pdf_page(
+        pdf_bytes: &[u8],
+        page_number: u32,
+        dpi: u32,
+    ) -> Result<Vec<u8>, String> {
         if pdf_bytes.is_empty() {
             return Err("Empty PDF buffer".to_string());
         }
@@ -412,8 +426,10 @@ impl NativeEngine {
             return Err("Cannot generate searchable PDF from empty image buffer".to_string());
         }
 
-        let lang_cstr = CString::new(language).map_err(|e| format!("Invalid language string: {}", e))?;
-        let out_cstr = CString::new(output_pdf_base).map_err(|e| format!("Invalid output base string: {}", e))?;
+        let lang_cstr =
+            CString::new(language).map_err(|e| format!("Invalid language string: {}", e))?;
+        let out_cstr = CString::new(output_pdf_base)
+            .map_err(|e| format!("Invalid output base string: {}", e))?;
 
         let rc = unsafe {
             oculus_engine_create_searchable_pdf(

@@ -153,30 +153,25 @@ To operate without internet access or manual setup:
 
 ## 5. How to Build & Package
 
-To build the standalone distributable package:
-
-```bash
-# 1. Build frontend production bundle
-npm run build
-
-# 2. Build native Tauri desktop binary
-cargo build --manifest-path src-tauri/Cargo.toml
-
-# 3. Run standalone bundler
-python3 scripts/bundle_macos.py
-
-# 4. Verify clean-machine execution
-python3 tests/clean_machine_verify.py
-```
+Each system has a release script that builds the interface, the app and the installer in one go
+(`scripts/release_macos.sh`, `scripts/release_windows.ps1`, `scripts/release_linux.sh`); on macOS it
+runs `scripts/bundle_macos.py` on the built app. The installers land in `dist-release/`. See
+[RELEASING.md](RELEASING.md) for the prerequisites and for releasing through GitHub Actions.
 
 ---
 
 ## 6. Linux & Windows Distribution Roadmap
 
-### Linux (AppImage / Debian package)
-1. **Shared Libraries**: Bundle `libtesseract.so.5`, `libleptonica.so.6`, and dependencies using `linuxdeploy` or `patchelf` with `$ORIGIN/../lib` as `DT_RPATH`.
-2. **PDF Rasterization**: Complement CoreGraphics with `#if defined(__linux__)` Poppler `poppler-glib` or PDFium backend.
-3. **Packaging**: AppImage ensures single-file execution on Ubuntu 20.04+, Fedora, and Arch.
+### Linux (AppImage / Debian package) — shipped
+`scripts/release_linux.sh` builds both with `tauri build --bundles deb,appimage` (config in
+`src-tauri/tauri.linux.conf.json`; see RELEASING.md).
+1. **Shared Libraries**: the AppImage bundles `libtesseract.so.4`, `libleptonica` (`liblept.so.5`) and their
+   dependencies through `linuxdeploy`. The `.deb` instead depends on the system `libtesseract4` and `liblept5`.
+2. **Tessdata**: Tauri installs it to `<prefix>/lib/OCULUS/tessdata`, which the engine's discovery
+   cascade (`src-tauri/src/ffi/mod.rs`) checks relative to the executable.
+3. **PDF Rasterization**: the native engine has none on Linux (CoreGraphics is macOS-only). The
+   interface draws scanned PDF pages with PDF.js and OCRs the images; a native backend (Poppler or
+   PDFium) would make long documents faster.
 
 ### Windows (MSI / NSIS Installer)
 1. **DLL Packaging**: Bundle `tesseract50.dll`, `leptonica-1.82.0.dll`, and MSVC CRT into the application root. Windows searches the executable's directory by default (`SafeDllSearchMode`).

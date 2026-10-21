@@ -8,6 +8,10 @@ use std::sync::Arc;
 use std::time::Instant;
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "needs PDF page rendering, which only macOS has"
+)]
 fn test_measure_performance_baseline() {
     println!("\n=== OCULUS PERFORMANCE BENCHMARK EXECUTION ===");
 
@@ -59,7 +63,10 @@ fn test_measure_performance_baseline() {
     );
 
     // 4. Single-Image Malayalam OCR
-    let sample_mal = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/corpus/malayalam/mal_conjuncts.png");
+    let sample_mal = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/corpus/malayalam/mal_conjuncts.png"
+    );
     let mal_bytes = fs::read(sample_mal).expect("Read mal_conjuncts.png");
 
     let t_mal0 = Instant::now();
@@ -81,7 +88,10 @@ fn test_measure_performance_baseline() {
     );
 
     // 5. PDF 300 DPI Rendering & OCR Pipeline
-    let sample_pdf = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let sample_pdf = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
     let pdf_bytes = fs::read(sample_pdf).expect("Read sample_digital.pdf");
 
     let t_render0 = Instant::now();
@@ -126,12 +136,12 @@ fn test_measure_performance_baseline() {
     };
 
     let t_spdf0 = Instant::now();
-    let export_res = oculus_lib::commands::perform_export(&engine, export_req).expect("Searchable PDF export");
+    let export_res =
+        oculus_lib::commands::perform_export(&engine, export_req).expect("Searchable PDF export");
     let searchable_pdf_ms = t_spdf0.elapsed().as_secs_f64() * 1000.0;
     println!(
         "6. Searchable PDF Generation: {:.2} ms (bytes written: {})",
-        searchable_pdf_ms,
-        export_res.bytes_written
+        searchable_pdf_ms, export_res.bytes_written
     );
 
     // 7. Cancellation Latency
@@ -139,7 +149,10 @@ fn test_measure_performance_baseline() {
     let t_cancel0 = Instant::now();
     cancel_flag.store(true, std::sync::atomic::Ordering::SeqCst);
     let cancel_latency_us = t_cancel0.elapsed().as_micros();
-    println!("7. Atomic Cancellation Response Latency: {} microseconds", cancel_latency_us);
+    println!(
+        "7. Atomic Cancellation Response Latency: {} microseconds",
+        cancel_latency_us
+    );
 
     // 8. Batch Throughput Measurement (10 items, 4 concurrent workers)
     let tokio_rt = tokio::runtime::Runtime::new().expect("Tokio runtime");
@@ -155,15 +168,9 @@ fn test_measure_performance_baseline() {
 
         let cancel_tok = Arc::new(AtomicBool::new(false));
         let t_batch0 = Instant::now();
-        let s = BatchEngine::run_batch(
-            engine.clone(),
-            items,
-            4,
-            cancel_tok,
-            |_p| {},
-        )
-        .await
-        .expect("Batch run");
+        let s = BatchEngine::run_batch(engine.clone(), items, 4, cancel_tok, |_p| {})
+            .await
+            .expect("Batch run");
         let batch_ms = t_batch0.elapsed().as_secs_f64() * 1000.0;
         (s, batch_ms)
     });

@@ -35,6 +35,11 @@ pub fn run() {
             commands::protect_pdf_native,
             commands::unlock_pdf_native
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::guard::clean_up();
+            }
+        });
 }

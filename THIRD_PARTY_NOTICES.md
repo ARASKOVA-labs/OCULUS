@@ -12,6 +12,7 @@ main ones; run `bun pm ls` in `araskova-doccraft/` and `cargo tree` in `src-taur
 | lopdf | PDF repair and protection | MIT |
 | pdf-lib | PDF editing | MIT |
 | PDF.js (`pdfjs-dist`) | PDF rendering | Apache-2.0 |
+| libavif and libaom, via jSquash (`@jsquash/avif`) | AVIF encoding and decoding | BSD-2-Clause (libavif, libaom), Apache-2.0 (jSquash) |
 | React, TanStack Router and Start | Interface | MIT |
 | Tailwind CSS | Styling | MIT |
 | Lucide | Icons | ISC |

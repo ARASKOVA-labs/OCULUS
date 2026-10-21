@@ -3,7 +3,7 @@ name = "oculus-desktop"
 version = "0.1.0"
 description = "OCULUS - Local-first document intelligence desktop application"
 authors = ["Araskova"]
-license = "FSL-1.1-ALv2"
+license = "AGPL-3.0-only"
 edition = "2021"
 
 [lib]
@@ -28,6 +28,7 @@ tokio = { version = "1.0", features = ["full"] }
 uuid = { version = "1.0", features = ["v4"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 lopdf = "0.45.0"
+getrandom = "0.3"
 unicode-normalization = "0.1"
 
 [dev-dependencies]

@@ -7,8 +7,15 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "needs PDF page rendering, which only macOS has"
+)]
 fn test_pdf_page_counting_and_rendering() {
-    let pdf_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let pdf_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
     let pdf_bytes = fs::read(pdf_path).expect("Read sample_digital.pdf");
 
     // 1. Page count
@@ -17,13 +24,26 @@ fn test_pdf_page_counting_and_rendering() {
 
     // 2. High-DPI Page rendering
     let rendered_png = NativeEngine::render_pdf_page(&pdf_bytes, 1, 150).expect("Render page");
-    assert!(!rendered_png.is_empty(), "Rendered PNG bytes must not be empty");
-    assert!(rendered_png.starts_with(b"\x89PNG"), "Rendered output must be valid PNG");
+    assert!(
+        !rendered_png.is_empty(),
+        "Rendered PNG bytes must not be empty"
+    );
+    assert!(
+        rendered_png.starts_with(b"\x89PNG"),
+        "Rendered output must be valid PNG"
+    );
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "needs PDF page rendering, which only macOS has"
+)]
 fn test_pdf_pipeline_hybrid_processing() {
-    let pdf_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let pdf_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
     let pdf_bytes = fs::read(pdf_path).expect("Read sample_digital.pdf");
     let engine = NativeEngine::new(None).expect("Engine init");
     let cancel = AtomicBool::new(false);
@@ -43,7 +63,9 @@ fn test_pdf_pipeline_hybrid_processing() {
 
     assert_eq!(res.pages.len(), 1);
     assert!(
-        res.pages[0].text.contains("OCULUS DIGITAL PDF PAGE EXTRACTION"),
+        res.pages[0]
+            .text
+            .contains("OCULUS DIGITAL PDF PAGE EXTRACTION"),
         "Extracted text must contain 'OCULUS DIGITAL PDF PAGE EXTRACTION', got: {}",
         res.pages[0].text
     );
@@ -51,13 +73,23 @@ fn test_pdf_pipeline_hybrid_processing() {
 }
 
 #[tokio::test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "needs PDF page rendering, which only macOS has"
+)]
 async fn test_batch_processing_engine() {
     let engine = NativeEngine::new(None).expect("Engine init");
     let cancel = Arc::new(AtomicBool::new(false));
 
     let img1 = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_en.png");
-    let img2 = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_jpg.jpg");
-    let pdf1 = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let img2 = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_jpg.jpg"
+    );
+    let pdf1 = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
 
     let items = vec![
         BatchItem {
@@ -126,30 +158,38 @@ async fn test_batch_per_file_error_isolation() {
         },
     ];
 
-    let summary = BatchEngine::run_batch(
-        engine,
-        items,
-        2,
-        cancel,
-        |_prog| {},
-    )
-    .await
-    .expect("Run batch with error isolation");
+    let summary = BatchEngine::run_batch(engine, items, 2, cancel, |_prog| {})
+        .await
+        .expect("Run batch with error isolation");
 
     // The batch should complete with 2 successes and 1 failure without panicking
     assert_eq!(summary.total_files, 3);
     assert_eq!(summary.succeeded_files, 2, "Valid files must succeed");
-    assert_eq!(summary.failed_files, 1, "Corrupted file must fail gracefully");
+    assert_eq!(
+        summary.failed_files, 1,
+        "Corrupted file must fail gracefully"
+    );
 
-    let failed_item = summary.results.iter().find(|r| r.id == "b-corrupted").expect("Find failed item");
+    let failed_item = summary
+        .results
+        .iter()
+        .find(|r| r.id == "b-corrupted")
+        .expect("Find failed item");
     assert!(!failed_item.success);
     assert!(failed_item.error.is_some());
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "needs PDF page rendering, which only macOS has"
+)]
 fn test_pdf_structure_parser_fallback_on_corrupt_structure() {
     // Generate a test PDF with a valid digital PDF header and body
-    let pdf_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let pdf_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
     let pdf_bytes = fs::read(pdf_path).expect("Read sample_digital.pdf");
     let engine = NativeEngine::new(None).expect("Engine init");
     let cancel = AtomicBool::new(false);
@@ -176,6 +216,10 @@ fn test_pdf_structure_parser_fallback_on_corrupt_structure() {
 }
 
 #[test]
+#[cfg_attr(
+    not(target_os = "macos"),
+    ignore = "needs PDF page rendering, which only macOS has"
+)]
 fn test_digital_text_viability_and_fragmentation_fallback() {
     // 1. Digital text viability unit tests
     let clean_text = "This is a clean line of text from a normal document.\nAnother line of proper English words.\nThird sentence with complete words and structure.";
@@ -188,7 +232,10 @@ fn test_digital_text_viability_and_fragmentation_fallback() {
     assert!(!oculus_lib::pdf::is_digital_text_viable(pua_text));
 
     // 2. Integration test with sample_digital.pdf
-    let pdf_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let pdf_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
     let pdf_bytes = fs::read(pdf_path).expect("Read sample_digital.pdf");
     let engine = NativeEngine::new(None).expect("Engine init");
     let cancel = AtomicBool::new(false);
@@ -207,12 +254,17 @@ fn test_digital_text_viability_and_fragmentation_fallback() {
     .expect("Process digital PDF");
     assert_eq!(res.pages.len(), 1);
     assert!(res.pages[0].confidence > 90.0);
-    assert!(res.pages[0].text.contains("OCULUS DIGITAL PDF PAGE EXTRACTION"));
+    assert!(res.pages[0]
+        .text
+        .contains("OCULUS DIGITAL PDF PAGE EXTRACTION"));
 }
 
 #[tokio::test]
 async fn test_native_pdf_repair_protect_and_unlock() {
-    let pdf_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_digital.pdf");
+    let pdf_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_digital.pdf"
+    );
     let pdf_bytes = fs::read(pdf_path).expect("Read sample_digital.pdf");
 
     // 1. Repair test
@@ -230,18 +282,40 @@ async fn test_native_pdf_repair_protect_and_unlock() {
     assert!(!encrypted.is_empty());
     assert!(encrypted.starts_with(b"%PDF"));
 
-    // Verify it is encrypted
+    // Verify it is encrypted, with AES-256 (V 5, AESV3) and not RC4
     let doc = lopdf::Document::load_mem(&encrypted).expect("Parse encrypted PDF structure");
-    assert!(doc.is_encrypted(), "Output document must be marked encrypted");
+    assert!(
+        doc.is_encrypted(),
+        "Output document must be marked encrypted"
+    );
+    let raw = String::from_utf8_lossy(&encrypted);
+    assert!(
+        raw.contains("/AESV3"),
+        "Output must use the AES-256 crypt filter"
+    );
+    assert!(
+        !raw.contains("/V 2"),
+        "Output must not use the RC4 (V2) handler"
+    );
+
+    // A wrong password does not open it
+    assert!(
+        oculus_lib::commands::unlock_pdf_native(encrypted.clone(), "wrong".to_string())
+            .await
+            .is_err(),
+        "Unlock must fail with a wrong password"
+    );
 
     // 3. Unlock test
-    let decrypted = oculus_lib::commands::unlock_pdf_native(encrypted, password)
+    let decrypted = oculus_lib::commands::unlock_pdf_native(encrypted.clone(), password.clone())
         .await
         .expect("Unlock should succeed with correct password");
     assert!(!decrypted.is_empty());
     assert!(decrypted.starts_with(b"%PDF"));
 
     let unenc_doc = lopdf::Document::load_mem(&decrypted).expect("Parse decrypted PDF");
-    assert!(!unenc_doc.is_encrypted(), "Output document must be decrypted");
+    assert!(
+        !unenc_doc.is_encrypted(),
+        "Output document must be decrypted"
+    );
 }
-

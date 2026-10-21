@@ -50,8 +50,7 @@ pub fn is_digital_text_viable(text: &str) -> bool {
     let unprintable_count = trimmed
         .chars()
         .filter(|&c| {
-            (c >= '\u{E000}' && c <= '\u{F8FF}')
-                || (c < ' ' && c != '\n' && c != '\r' && c != '\t')
+            (c >= '\u{E000}' && c <= '\u{F8FF}') || (c < ' ' && c != '\n' && c != '\r' && c != '\t')
         })
         .count();
     let unprintable_ratio = unprintable_count as f32 / trimmed.chars().count() as f32;
@@ -134,7 +133,10 @@ impl PdfPipeline {
                 // Robust fallback to native CoreGraphics engine
                 match NativeEngine::pdf_page_count(pdf_bytes) {
                     Ok(count) if count > 0 => {
-                        warnings.push(format!("PDF structure parser fallback (CoreGraphics): {}", e));
+                        warnings.push(format!(
+                            "PDF structure parser fallback (CoreGraphics): {}",
+                            e
+                        ));
                         let fallback_nums: Vec<u32> = (1..=count).collect();
                         (None, fallback_nums, count)
                     }
@@ -230,7 +232,11 @@ impl PdfPipeline {
                     }
                 };
 
-                progress_cb(page_idx, total_pages, "Running optical character recognition");
+                progress_cb(
+                    page_idx,
+                    total_pages,
+                    "Running optical character recognition",
+                );
 
                 let page_doc_id = format!("{}_p{}", document_id, page_idx);
                 let page_filename = format!("{}_page_{}.png", filename, page_idx);

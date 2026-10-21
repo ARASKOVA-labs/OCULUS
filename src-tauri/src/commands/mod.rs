@@ -12,33 +12,23 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
+pub mod guard;
+use guard::MAX_FILE_SIZE_BYTES;
+
 pub struct AppState {
     pub engine: Arc<NativeEngine>,
     pub cancel_flag: Arc<AtomicBool>,
 }
 
-const MAX_FILE_SIZE_BYTES: u64 = 250 * 1024 * 1024; // 250 MB
-
 #[tauri::command]
 pub async fn inspect_document(path: String) -> Result<DocumentDescriptor, String> {
-    let file_path = Path::new(&path);
-    if !file_path.exists() {
+    if !Path::new(&path).exists() {
         return Err(format!("File does not exist: {}", path));
     }
-
-    let canonical = file_path
-        .canonicalize()
-        .map_err(|e| format!("Invalid file path: {}", e))?;
-
-    let metadata = fs::metadata(&canonical).map_err(|e| format!("Failed to read metadata: {}", e))?;
-    let size_bytes = metadata.len();
-
-    if size_bytes > MAX_FILE_SIZE_BYTES {
-        return Err(format!(
-            "File size exceeds safety limit of 250MB (size: {} MB)",
-            size_bytes / (1024 * 1024)
-        ));
-    }
+    let canonical = guard::readable_file(&path)?;
+    let size_bytes = fs::metadata(&canonical)
+        .map_err(|e| format!("Failed to read metadata: {}", e))?
+        .len();
 
     let filename = canonical
         .file_name()
@@ -60,7 +50,12 @@ pub async fn inspect_document(path: String) -> Result<DocumentDescriptor, String
         if file_bytes.starts_with(b"\x89PNG") || file_bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
             match image::load_from_memory(&file_bytes) {
                 Ok(img) => (true, Some(img.width()), Some(img.height()), None),
-                Err(e) => (false, None, None, Some(format!("Image decode error: {}", e))),
+                Err(e) => (
+                    false,
+                    None,
+                    None,
+                    Some(format!("Image decode error: {}", e)),
+                ),
             }
         } else if is_pdf {
             let pages = NativeEngine::pdf_page_count(&file_bytes).unwrap_or(1);
@@ -69,10 +64,20 @@ pub async fn inspect_document(path: String) -> Result<DocumentDescriptor, String
             // TIFF document
             (true, None, None, None)
         } else {
-            (false, None, None, Some("Unsupported file format".to_string()))
+            (
+                false,
+                None,
+                None,
+                Some("Unsupported file format".to_string()),
+            )
         }
     } else {
-        (false, None, None, Some("File too small to be valid".to_string()))
+        (
+            false,
+            None,
+            None,
+            Some("File too small to be valid".to_string()),
+        )
     };
 
     Ok(DocumentDescriptor {
@@ -89,19 +94,15 @@ pub async fn inspect_document(path: String) -> Result<DocumentDescriptor, String
 }
 
 #[tauri::command]
-pub async fn preprocess_image(
-    path: String,
-    options: PreprocessOptions,
-) -> Result<String, String> {
-    let canonical = Path::new(&path)
-        .canonicalize()
-        .map_err(|e| format!("Invalid path: {}", e))?;
-
-    let bytes = fs::read(&canonical).map_err(|e| format!("Failed to read image for preprocessing: {}", e))?;
+pub async fn preprocess_image(path: String, options: PreprocessOptions) -> Result<String, String> {
+    let canonical = guard::readable_file(&path)?;
+    let bytes = fs::read(&canonical)
+        .map_err(|e| format!("Failed to read image for preprocessing: {}", e))?;
     let preprocessed = NativeEngine::preprocess_image(&bytes, options)?;
 
-    let temp_path = std::env::temp_dir().join(format!("oculus_prep_{}.png", uuid::Uuid::new_v4()));
-    fs::write(&temp_path, preprocessed).map_err(|e| format!("Failed to write preprocessed image: {}", e))?;
+    let temp_path = guard::work_dir()?.join(format!("prep_{}.png", uuid::Uuid::new_v4()));
+    fs::write(&temp_path, preprocessed)
+        .map_err(|e| format!("Failed to write preprocessed image: {}", e))?;
 
     Ok(temp_path.to_string_lossy().into_owned())
 }
@@ -116,19 +117,18 @@ pub async fn run_ocr(
     options: PreprocessOptions,
     file_bytes: Option<Vec<u8>>,
 ) -> Result<OcrResult, String> {
+    guard::document_id(&document_id)?;
     state.cancel_flag.store(false, Ordering::SeqCst);
 
     let (filename, fname, bytes) = if Path::new(&path).is_file() {
-        let canonical = Path::new(&path)
-            .canonicalize()
-            .map_err(|e| format!("Invalid path '{}': {}", path, e))?;
+        let canonical = guard::readable_file(&path)?;
         let f = canonical
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "document".to_string());
         let full_str = canonical.to_string_lossy().into_owned();
-        let b = fs::read(&canonical)
-            .map_err(|e| format!("Failed to read document {}: {}", path, e))?;
+        let b =
+            fs::read(&canonical).map_err(|e| format!("Failed to read document {}: {}", path, e))?;
         (f, full_str, b)
     } else {
         match file_bytes {
@@ -195,10 +195,7 @@ pub async fn run_ocr(
     }
 
     // Cache bytes for document_id in temp directory so subsequent exports always have access to source bytes
-    let cache_dir = std::env::temp_dir().join("oculus_cache");
-    let _ = fs::create_dir_all(&cache_dir);
-    let cache_file = cache_dir.join(&document_id);
-    let _ = fs::write(&cache_file, &bytes);
+    let _ = fs::write(guard::work_dir()?.join(&document_id), &bytes);
 
     let engine = state.engine.clone();
     let doc_id = document_id.clone();
@@ -246,11 +243,9 @@ pub async fn run_ocr(
             },
         );
 
-        tokio::task::spawn_blocking(move || {
-            engine.run_ocr(&doc_id, &fname, &bytes, &lang, options)
-        })
-        .await
-        .map_err(|e| format!("Worker thread panicked: {}", e))??
+        tokio::task::spawn_blocking(move || engine.run_ocr(&doc_id, &fname, &bytes, &lang, options))
+            .await
+            .map_err(|e| format!("Worker thread panicked: {}", e))??
     };
 
     let total_chars: usize = res.pages.iter().map(|p| p.text.len()).sum();
@@ -342,10 +337,7 @@ fn resolve_default_export_dir(source_filename: &str) -> PathBuf {
     PathBuf::from(".")
 }
 
-pub fn perform_export(
-    engine: &NativeEngine,
-    req: ExportRequest,
-) -> Result<ExportResponse, String> {
+pub fn perform_export(engine: &NativeEngine, req: ExportRequest) -> Result<ExportResponse, String> {
     let filename_stem = Path::new(&req.result.filename)
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -373,12 +365,18 @@ pub fn perform_export(
             base_dir.join(format!("{}_extracted.{}", filename_stem, ext))
         }
     };
+    let target_path = guard::export_target(&target_path, &req.format.to_lowercase())?;
 
     // Ensure parent directory exists
     if let Some(parent) = target_path.parent() {
         if !parent.as_os_str().is_empty() && parent != Path::new("/") {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create export directory '{}': {}", parent.display(), e))?;
+            fs::create_dir_all(parent).map_err(|e| {
+                format!(
+                    "Failed to create export directory '{}': {}",
+                    parent.display(),
+                    e
+                )
+            })?;
         }
     }
 
@@ -390,11 +388,16 @@ pub fn perform_export(
             .into_owned();
 
         let source_path = Path::new(&req.result.filename);
-        let cache_file = std::env::temp_dir().join("oculus_cache").join(&req.result.document_id);
+        let cache_file = guard::work_dir()?.join(guard::document_id(&req.result.document_id)?);
 
         let source_bytes = if source_path.exists() && !req.result.filename.is_empty() {
-            fs::read(source_path)
-                .map_err(|e| format!("Failed to read source file '{}': {}", req.result.filename, e))?
+            let source = guard::readable_file(&req.result.filename)?;
+            fs::read(source).map_err(|e| {
+                format!(
+                    "Failed to read source file '{}': {}",
+                    req.result.filename, e
+                )
+            })?
         } else if cache_file.exists() {
             fs::read(&cache_file)
                 .map_err(|e| format!("Failed to read cached document bytes: {}", e))?
@@ -417,7 +420,9 @@ pub fn perform_export(
         engine.create_searchable_pdf(&sample_png, &req.result.language, &output_base)?;
 
         let final_pdf = PathBuf::from(format!("{}.pdf", output_base));
-        let size = fs::metadata(&final_pdf).map(|m| m.len() as usize).unwrap_or(0);
+        let size = fs::metadata(&final_pdf)
+            .map(|m| m.len() as usize)
+            .unwrap_or(0);
 
         return Ok(ExportResponse {
             success: true,
@@ -442,7 +447,10 @@ pub fn perform_export(
                 "- **Processing time**: `{}ms`\n",
                 req.result.processing_time_ms
             ));
-            md.push_str(&format!("- **Total Pages**: `{}`\n\n", req.result.pages.len()));
+            md.push_str(&format!(
+                "- **Total Pages**: `{}`\n\n",
+                req.result.pages.len()
+            ));
             for page in &req.result.pages {
                 md.push_str(&format!(
                     "## Page {}\n*Confidence: {:.1}%*\n\n",
@@ -458,8 +466,13 @@ pub fn perform_export(
         _ => return Err(format!("Unsupported export format: {}", req.format)),
     };
 
-    let mut file = fs::File::create(&target_path)
-        .map_err(|e| format!("Failed to create destination file {}: {}", target_path.display(), e))?;
+    let mut file = fs::File::create(&target_path).map_err(|e| {
+        format!(
+            "Failed to create destination file {}: {}",
+            target_path.display(),
+            e
+        )
+    })?;
 
     file.write_all(output_content.as_bytes())
         .map_err(|e| format!("Failed to write export content: {}", e))?;
@@ -489,38 +502,77 @@ pub async fn render_pdf_page(
     if !file_bytes.starts_with(b"%PDF") {
         return Err("File is not a valid PDF document".to_string());
     }
-    crate::ffi::NativeEngine::render_pdf_page(&file_bytes, page_number, dpi)
+    // past 600 dpi a page is no sharper on screen, only bigger in memory
+    crate::ffi::NativeEngine::render_pdf_page(&file_bytes, page_number, dpi.clamp(36, 600))
 }
 
 #[tauri::command]
 pub async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
-    let p = Path::new(&path);
-    if !p.exists() {
+    if !Path::new(&path).exists() {
         return Err(format!("File does not exist: {}", path));
     }
+    let p = guard::readable_file(&path)?;
     fs::read(p).map_err(|e| format!("Failed to read file '{}': {}", path, e))
 }
 
 #[tauri::command]
 pub async fn show_in_folder(path: String) -> Result<(), String> {
+    // only a real, absolute path: never something the opener would read as an option
+    let p = Path::new(&path);
+    if !p.is_absolute() || !p.exists() {
+        return Err(format!("Nothing to show at '{}'", path));
+    }
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
             .arg("-R")
+            .arg("--")
             .arg(&path)
             .spawn()
             .map_err(|e| format!("Failed to show in folder: {}", e))?;
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    // Explorer selects the file; on Linux there is no common "select" call, so the folder opens.
+    #[cfg(target_os = "windows")]
     {
-        let _ = path;
+        std::process::Command::new("explorer")
+            .arg(format!("/select,{}", path))
+            .spawn()
+            .map_err(|e| format!("Failed to show in folder: {}", e))?;
+        Ok(())
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let p = std::path::Path::new(&path);
+        let dir = if p.is_dir() {
+            p
+        } else {
+            p.parent().unwrap_or(p)
+        };
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to show in folder: {}", e))?;
         Ok(())
     }
 }
 
+/// Runs PDF work on a worker thread, so a malformed file that makes lopdf panic gives an error
+/// instead of a call that never returns.
+async fn off_thread(
+    work: impl FnOnce() -> Result<Vec<u8>, String> + Send + 'static,
+) -> Result<Vec<u8>, String> {
+    tokio::task::spawn_blocking(work).await.map_err(|_| {
+        "This PDF could not be read: it is damaged in a way OCULUS cannot handle".to_string()
+    })?
+}
+
 #[tauri::command]
 pub async fn repair_pdf_native(file_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
+    off_thread(move || repair_pdf(file_bytes)).await
+}
+
+fn repair_pdf(file_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     if file_bytes.is_empty() {
         return Err("Cannot repair empty PDF file".to_string());
     }
@@ -533,8 +585,44 @@ pub async fn repair_pdf_native(file_bytes: Vec<u8>) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// lopdf leaves the key length out of an AES-256 Encrypt dictionary. qpdf and pypdf assume 256 bits
+/// for V5, but Apple's PDFKit (Preview, Safari) does not, and draws the pages blank. Writing it the
+/// way qpdf does (/Length 256, and /Length 32 with /AuthEvent /DocOpen on the crypt filter) fixes it.
+fn declare_aes256_key_length(doc: &mut lopdf::Document) {
+    use lopdf::Object;
+    let target = match doc.trailer.get(b"Encrypt") {
+        Ok(Object::Reference(id)) => Some(*id),
+        _ => None,
+    };
+    let dict = match target {
+        Some(id) => doc.get_object_mut(id).and_then(Object::as_dict_mut).ok(),
+        None => doc
+            .trailer
+            .get_mut(b"Encrypt")
+            .and_then(Object::as_dict_mut)
+            .ok(),
+    };
+    let Some(dict) = dict else { return };
+    dict.set("Length", Object::Integer(256));
+    if let Ok(filter) = dict
+        .get_mut(b"CF")
+        .and_then(Object::as_dict_mut)
+        .and_then(|cf| cf.get_mut(b"StdCF"))
+        .and_then(Object::as_dict_mut)
+    {
+        filter.set("Length", Object::Integer(32));
+        filter.set("AuthEvent", Object::Name(b"DocOpen".to_vec()));
+    }
+}
+
+/// Encrypts with AES-256. The same password opens the file and governs its permissions, so the
+/// permission flags are advisory: anyone who can open the file can also change them.
 #[tauri::command]
 pub async fn protect_pdf_native(file_bytes: Vec<u8>, password: String) -> Result<Vec<u8>, String> {
+    off_thread(move || protect_pdf(file_bytes, password)).await
+}
+
+fn protect_pdf(file_bytes: Vec<u8>, password: String) -> Result<Vec<u8>, String> {
     if file_bytes.is_empty() {
         return Err("Cannot protect empty PDF file".to_string());
     }
@@ -552,9 +640,12 @@ pub async fn protect_pdf_native(file_bytes: Vec<u8>, password: String) -> Result
     if !doc.trailer.has(b"ID") {
         let u1 = uuid::Uuid::new_v4();
         let u2 = uuid::Uuid::new_v4();
-        let file_id_1 = lopdf::Object::String(u1.as_bytes().to_vec(), lopdf::StringFormat::Hexadecimal);
-        let file_id_2 = lopdf::Object::String(u2.as_bytes().to_vec(), lopdf::StringFormat::Hexadecimal);
-        doc.trailer.set(b"ID", lopdf::Object::Array(vec![file_id_1, file_id_2]));
+        let file_id_1 =
+            lopdf::Object::String(u1.as_bytes().to_vec(), lopdf::StringFormat::Hexadecimal);
+        let file_id_2 =
+            lopdf::Object::String(u2.as_bytes().to_vec(), lopdf::StringFormat::Hexadecimal);
+        doc.trailer
+            .set(b"ID", lopdf::Object::Array(vec![file_id_1, file_id_2]));
     }
 
     let permissions = lopdf::encryption::Permissions::PRINTABLE
@@ -562,11 +653,21 @@ pub async fn protect_pdf_native(file_bytes: Vec<u8>, password: String) -> Result
         | lopdf::encryption::Permissions::COPYABLE_FOR_ACCESSIBILITY
         | lopdf::encryption::Permissions::PRINTABLE_IN_HIGH_QUALITY;
 
-    let requested_version = lopdf::encryption::EncryptionVersion::V2 {
-        document: &doc,
+    // AES-256 (PDF 2.0 security handler, V5/R6) with a fresh random file key. Earlier builds used
+    // the V2 handler, which is RC4: weak, and not what the interface promised.
+    let mut file_key = [0u8; 32];
+    getrandom::fill(&mut file_key).map_err(|e| format!("No secure random source: {}", e))?;
+    let aes: std::sync::Arc<dyn lopdf::encryption::crypt_filters::CryptFilter> =
+        std::sync::Arc::new(lopdf::encryption::crypt_filters::Aes256CryptFilter);
+
+    let requested_version = lopdf::encryption::EncryptionVersion::V5 {
+        encrypt_metadata: true,
+        crypt_filters: std::collections::BTreeMap::from([(b"StdCF".to_vec(), aes)]),
+        file_encryption_key: &file_key,
+        stream_filter: b"StdCF".to_vec(),
+        string_filter: b"StdCF".to_vec(),
         owner_password: &password,
         user_password: &password,
-        key_length: 128,
         permissions,
     };
 
@@ -575,6 +676,7 @@ pub async fn protect_pdf_native(file_bytes: Vec<u8>, password: String) -> Result
 
     doc.encrypt(&state)
         .map_err(|e| format!("Failed to encrypt document: {:?}", e))?;
+    declare_aes256_key_length(&mut doc);
 
     let mut out = Vec::new();
     doc.save_to(&mut out)
@@ -585,6 +687,10 @@ pub async fn protect_pdf_native(file_bytes: Vec<u8>, password: String) -> Result
 
 #[tauri::command]
 pub async fn unlock_pdf_native(file_bytes: Vec<u8>, password: String) -> Result<Vec<u8>, String> {
+    off_thread(move || unlock_pdf(file_bytes, password)).await
+}
+
+fn unlock_pdf(file_bytes: Vec<u8>, password: String) -> Result<Vec<u8>, String> {
     if file_bytes.is_empty() {
         return Err("Cannot unlock empty PDF file".to_string());
     }
@@ -608,4 +714,3 @@ pub async fn unlock_pdf_native(file_bytes: Vec<u8>, password: String) -> Result<
 
     Ok(out)
 }
-

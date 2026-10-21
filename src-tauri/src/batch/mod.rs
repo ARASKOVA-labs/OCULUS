@@ -73,7 +73,11 @@ impl BatchEngine {
 
         let start_time = Instant::now();
         let total_files = items.len();
-        let concurrency = if max_concurrency > 0 { max_concurrency } else { 4 };
+        let concurrency = if max_concurrency > 0 {
+            max_concurrency
+        } else {
+            4
+        };
         let semaphore = Arc::new(Semaphore::new(concurrency));
         let progress_fn = Arc::new(progress_sender);
 
@@ -115,7 +119,9 @@ impl BatchEngine {
                 }
 
                 // Read file
-                let bytes = match fs::read(&item.path) {
+                let bytes = match crate::commands::guard::readable_file(&item.path)
+                    .and_then(|p| fs::read(p).map_err(|e| e.to_string()))
+                {
                     Ok(b) => b,
                     Err(e) => {
                         return BatchFileResult {
@@ -150,7 +156,11 @@ impl BatchEngine {
                     completed_files: idx + 1,
                     current_file: filename.clone(),
                     progress_percent: percent,
-                    current_stage: if ocr_res.is_ok() { "Completed".to_string() } else { "Failed".to_string() },
+                    current_stage: if ocr_res.is_ok() {
+                        "Completed".to_string()
+                    } else {
+                        "Failed".to_string()
+                    },
                 });
 
                 match ocr_res {

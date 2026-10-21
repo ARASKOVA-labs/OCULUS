@@ -1,7 +1,7 @@
 # Releasing OCULUS
 
 OCULUS ships as a macOS installer (`.dmg`) for Apple Silicon and Intel, plus a Windows installer
-(see the Windows section below). Each macOS installer is
+and Linux packages (see the Windows and Linux sections below). Each macOS installer is
 self-contained: the Tesseract and Leptonica libraries and the English, Malayalam and
 orientation language data are inside the app, so it runs on a clean Mac.
 
@@ -13,9 +13,9 @@ orientation language data are inside the app, so it runs on a clean Mac.
    git tag v0.1.0
    git push origin v0.1.0
    ```
-3. The **Release** workflow builds both macOS architectures and Windows, runs the UI and Rust
-   tests, and opens a **draft** GitHub release with the `.dmg` / `-setup.exe` files and their
-   `.sha256` checksums.
+3. The **Release** workflow builds both macOS architectures, Windows and Linux, runs the UI and Rust
+   tests, and opens a **draft** GitHub release with the `.dmg` / `-setup.exe` / `.AppImage` / `.deb`
+   files and their `.sha256` checksums.
 4. Open the draft, check the installers, then publish.
 
 The workflow refuses to run if the tag does not match the version in `tauri.conf.json`.
@@ -26,7 +26,7 @@ the installers as workflow artifacts only.
 
 | Secret | Needed | What it is |
 |---|---|---|
-| `SUBMODULE_TOKEN` | **Yes** | Fine-grained token with read access to `ARASKOVA-labs/araskova-doccraft` (the UI submodule is private; the default workflow token cannot read it). |
+| `SUBMODULE_TOKEN` | While the repos are private | Fine-grained token with read access to `ARASKOVA-labs/araskova-doccraft` (a private UI submodule is not readable with the default workflow token). Once both repositories are public the workflows fall back to the default token and the secret can be deleted. |
 | `APPLE_CERTIFICATE` | No | Base64 of a *Developer ID Application* `.p12` certificate. |
 | `APPLE_CERTIFICATE_PASSWORD` | With the certificate | Password of that `.p12`. |
 | `APPLE_SIGNING_IDENTITY` | With the certificate | e.g. `Developer ID Application: Araskova (TEAMID)`. |
@@ -62,10 +62,10 @@ failed run uploads `windows-build-logs` (vcpkg and build-script logs) as an arti
 browser-side tools (merge, split, compress, convert and the rest). Text-based PDFs are read through
 their text layer.
 
-**What does not work yet:** OCR of scanned PDF pages. Turning a PDF page into an image uses macOS
-CoreGraphics, and there is no replacement on Windows in this release. OCULUS shows a clear message
-instead (convert the PDF to JPG with the PDF to JPG tool and run OCR on the images, or use macOS).
-The draft release notes the workflow writes say the same.
+**Scanned PDFs:** the native engine turns PDF pages into images with macOS CoreGraphics, which
+Windows does not have. When it reports that, the interface draws each page with PDF.js and sends
+the page images to the native OCR instead (`ocrPdfAsImages` in `araskova-doccraft/src/lib/tauri-bridge.ts`).
+It is slower than macOS on long documents.
 
 **SmartScreen:** without a certificate the installer is unsigned, so Windows shows "Windows
 protected your PC". Choose **More info**, then **Run anyway**. Add `WINDOWS_CERTIFICATE` and
@@ -86,6 +86,60 @@ scripts\release_windows.ps1      # writes dist-release\OCULUS_<version>_x64-setu
 
 The Windows configuration is in `src-tauri/tauri.windows.conf.json`. The script logs to
 `build-logs\release_windows.log`.
+
+## Linux (x64)
+
+The same tag also builds Linux packages on an Ubuntu 22.04 runner: `OCULUS_<version>_amd64.deb` and
+`OCULUS_<version>_amd64.AppImage`, each with a `.sha256`. The language data is installed next to the
+app (`/usr/lib/OCULUS/tessdata` for the `.deb`, inside the image for the AppImage); the app finds it
+without any setup.
+
+- **AppImage** carries its own copies of Tesseract, Leptonica and the GTK/WebKit libraries, so it runs
+  on x86-64 distributions from 2022 or newer (Ubuntu 22.04, Debian 12, Fedora 36 and later). Make it
+  executable (`chmod +x OCULUS_*.AppImage`) and run it.
+- **.deb** is for Ubuntu 22.04 and derivatives. It depends on the system `libtesseract4` and
+  `liblept5` (Ubuntu 22.04 ships Tesseract 4.1), plus WebKitGTK 4.1 and GTK 3, and `apt` pulls them in:
+  `sudo apt install ./OCULUS_*.deb`. Distributions that ship Tesseract 5 need the AppImage instead.
+
+**The Linux build is best-effort**, like Windows: it runs in its own job that is allowed to fail, and
+the draft notes say so if the Linux packages are missing.
+
+**What works on Linux:** image OCR (PNG, JPG, TIFF) in English and Malayalam, and all the
+browser-side tools. Scanned PDFs are read the same way as on Windows: the interface draws the pages
+with PDF.js and the native OCR reads the images.
+
+Linux packages are not signed.
+
+### Build locally on Linux
+
+On Ubuntu 22.04 (a container works too):
+
+```bash
+sudo apt install build-essential pkg-config patchelf libssl-dev libxdo-dev \
+  libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+  libtesseract-dev libleptonica-dev
+(cd araskova-doccraft && bun install --frozen-lockfile)
+scripts/release_linux.sh        # writes dist-release/OCULUS_<version>_<arch>.deb and .AppImage
+```
+
+The Linux configuration is in `src-tauri/tauri.linux.conf.json`. On a machine without a display or
+FUSE (a container, CI) the script already sets `APPIMAGE_EXTRACT_AND_RUN=1`. On Apple Silicon the same
+steps in an `arm64` Ubuntu 22.04 container produce `arm64` / `aarch64` packages, which is a quick way
+to check the Linux build; only the x64 packages are released.
+
+## Continuous integration
+
+The **CI** workflow (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests;
+a newer push cancels the older run. It runs:
+
+- **UI** (Linux): `bun install --frozen-lockfile`, lint, the UI tests, and the static desktop build.
+- **Native** (macOS, Ubuntu 22.04 and Windows): the Rust and C++ build, then `cargo test`, with
+  Tesseract and Leptonica installed the same way as in the release workflow (Homebrew, `apt`, vcpkg).
+  The Windows tests are informational, as in the release; its build is not.
+
+CI needs no secrets once the repositories are public. While they are private it uses
+`SUBMODULE_TOKEN` to read the UI submodule. Cargo builds, the vcpkg packages and bun downloads are
+cached, so a run after the first is much faster.
 
 ## What the release build does for security
 

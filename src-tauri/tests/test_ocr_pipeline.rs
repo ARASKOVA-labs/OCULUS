@@ -4,7 +4,10 @@ use oculus_lib::models::{BoundingBox, OcrBlock, OcrPage, OcrResult, PreprocessOp
 #[test]
 fn test_native_engine_init() {
     let engine = NativeEngine::new(None);
-    assert!(engine.is_ok(), "Native engine should initialize with default tessdata");
+    assert!(
+        engine.is_ok(),
+        "Native engine should initialize with default tessdata"
+    );
 }
 
 #[test]
@@ -100,12 +103,18 @@ fn test_ocr_on_synthesized_image() {
 
     // Test preprocessing
     let prep_res = NativeEngine::preprocess_image(&png_bytes, opts);
-    assert!(prep_res.is_ok(), "Preprocessing should succeed on valid PNG");
+    assert!(
+        prep_res.is_ok(),
+        "Preprocessing should succeed on valid PNG"
+    );
     assert!(!prep_res.expect("prep bytes").is_empty());
 
     // Test OCR execution
     let ocr_res = engine.run_ocr("synth-1", "synth.png", &png_bytes, "eng", opts);
-    assert!(ocr_res.is_ok(), "OCR should complete without panic on synthetic image");
+    assert!(
+        ocr_res.is_ok(),
+        "OCR should complete without panic on synthetic image"
+    );
     let res = ocr_res.expect("ocr result");
     assert_eq!(res.document_id, "synth-1");
     assert_eq!(res.pages.len(), 1);
@@ -124,18 +133,30 @@ fn test_real_english_ocr() {
             orientation_detect: false,
             contrast_norm: false,
         };
-        let res = engine.run_ocr("doc-en", "sample_en.png", &bytes, "eng", opts)
+        let res = engine
+            .run_ocr("doc-en", "sample_en.png", &bytes, "eng", opts)
             .expect("english ocr");
         assert!(!res.pages.is_empty(), "must have pages");
         let text = &res.pages[0].text;
-        assert!(text.contains("OCULUS"), "extracted text should contain 'OCULUS', got: {}", text);
-        assert!(res.pages[0].confidence > 50.0, "confidence should be > 50%, got: {}", res.pages[0].confidence);
+        assert!(
+            text.contains("OCULUS"),
+            "extracted text should contain 'OCULUS', got: {}",
+            text
+        );
+        assert!(
+            res.pages[0].confidence > 50.0,
+            "confidence should be > 50%, got: {}",
+            res.pages[0].confidence
+        );
     }
 }
 
 #[test]
 fn test_real_malayalam_ocr() {
-    let sample_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../test_samples/sample_mal.png");
+    let sample_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/sample_mal.png"
+    );
     if let Ok(bytes) = std::fs::read(sample_path) {
         let engine = NativeEngine::new(None).expect("engine init");
         let opts = PreprocessOptions {
@@ -146,12 +167,17 @@ fn test_real_malayalam_ocr() {
             orientation_detect: false,
             contrast_norm: false,
         };
-        let res = engine.run_ocr("doc-mal", "sample_mal.png", &bytes, "mal", opts)
+        let res = engine
+            .run_ocr("doc-mal", "sample_mal.png", &bytes, "mal", opts)
             .expect("malayalam ocr");
         assert!(!res.pages.is_empty(), "must have pages");
         let text = &res.pages[0].text;
         // Verify Malayalam Unicode block presence (U+0D00 to U+0D7F)
         let has_malayalam = text.chars().any(|c| ('\u{0D00}'..='\u{0D7F}').contains(&c));
-        assert!(has_malayalam, "extracted text must contain Malayalam Unicode characters, got: {}", text);
+        assert!(
+            has_malayalam,
+            "extracted text must contain Malayalam Unicode characters, got: {}",
+            text
+        );
     }
 }

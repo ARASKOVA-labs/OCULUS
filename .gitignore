@@ -14,8 +14,12 @@ dist-standalone/
 # C++ native build artifacts
 native/build/
 
-# David-Stack local checkout
+# Internal notes, plans and audits (kept locally, never published)
+internal/
 David-Stack/
+
+# Claude Code local state and worktrees
+.claude/
 
 # macOS system files
 .DS_Store

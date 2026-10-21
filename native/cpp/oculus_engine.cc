@@ -1,6 +1,7 @@
 #include "oculus_engine.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -495,6 +496,10 @@ int32_t oculus_engine_render_pdf_page(
 
         double target_dpi = dpi > 0 ? static_cast<double>(dpi) : 300.0;
         double scale = target_dpi / 72.0;
+        // a crafted page size must not ask for gigabytes: keep the bitmap to 100 megapixels
+        const double max_pixels = 100.0 * 1000.0 * 1000.0;
+        const double area = media_box.size.width * media_box.size.height;
+        if (area * scale * scale > max_pixels) scale = std::sqrt(max_pixels / area);
         size_t width = static_cast<size_t>(media_box.size.width * scale);
         size_t height = static_cast<size_t>(media_box.size.height * scale);
 

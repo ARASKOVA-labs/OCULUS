@@ -1,8 +1,8 @@
 name: Release
 
-# Tag a version (git tag v0.1.0 && git push origin v0.1.0) to build the macOS and Windows installers
+# Tag a version (git tag v0.1.0 && git push origin v0.1.0) to build the macOS, Windows and Linux installers
 # and open a DRAFT release for review. "Run workflow" builds without publishing, which is a dry run.
-# The Windows build is best-effort: if it fails, the macOS release still goes out.
+# The Windows and Linux builds are best-effort: if one fails, the macOS release still goes out.
 on:
   push:
     tags: ["v*"]
@@ -29,12 +29,13 @@ jobs:
       HAVE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' }}
       HAVE_NOTARY: ${{ secrets.APPLE_ID != '' }}
     steps:
-      # The UI lives in the private araskova-doccraft submodule, which the default token cannot read.
-      # SUBMODULE_TOKEN: a fine-grained PAT with read access to ARASKOVA-labs/araskova-doccraft.
-      - uses: actions/checkout@v4
+      # While the araskova-doccraft submodule is private the default token cannot read it, so
+      # SUBMODULE_TOKEN (a fine-grained PAT with read access) is used; once it is public the default token is enough.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN }}
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Tag matches the app version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -42,9 +43,9 @@ jobs:
           VERSION="$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")"
           [ "v$VERSION" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != tauri.conf.json version v$VERSION" >&2; exit 1; }
 
-      - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
       - name: Native dependencies
         run: brew install tesseract leptonica pkg-config
@@ -92,7 +93,7 @@ jobs:
           xcrun stapler staple "$DMG"
           (cd dist-release && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: oculus-macos-${{ matrix.arch }}
           path: dist-release/*
@@ -116,10 +117,11 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN }}
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Tag matches the app version
         if: startsWith(github.ref, 'refs/tags/v')
@@ -127,14 +129,14 @@ jobs:
           $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
           if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME != tauri.conf.json version v$version" }
 
-      - uses: oven-sh/setup-bun@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           targets: x86_64-pc-windows-msvc
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
 
       - name: Restore vcpkg binary cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ github.workspace }}\vcpkg-cache
           key: vcpkg-tesseract-${{ runner.os }}-x64-windows-static-md-${{ hashFiles('.github/workflows/release.yml') }}
@@ -192,7 +194,7 @@ jobs:
             Remove-Item $pfx -Force -ErrorAction SilentlyContinue
           }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: oculus-windows-x64
           path: dist-release/*
@@ -210,22 +212,86 @@ jobs:
 
       - name: Upload build logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-build-logs
           path: build-logs/
           if-no-files-found: ignore
 
+  build-linux:
+    name: Linux x64
+    runs-on: ubuntu-22.04
+    # A Linux failure must never block the macOS release.
+    continue-on-error: true
+    timeout-minutes: 60
+    env:
+      # Tesseract needs the language data; the repo carries English, Malayalam and orientation data.
+      TESSDATA_PREFIX: ${{ github.workspace }}/tessdata
+      # AppImage tooling runs without FUSE (not available on hosted runners); strip is unneeded.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+      NO_STRIP: "true"
+      # Some Linux containers resolve "localhost" to an address the prerender preview server is not
+      # listening on, which fails the static UI build with ECONNREFUSED. IPv4 first avoids it.
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="$(python3 -c "import json;print(json.load(open('src-tauri/tauri.conf.json'))['version'])")"
+          [ "v$VERSION" = "${GITHUB_REF_NAME}" ] || { echo "tag ${GITHUB_REF_NAME} != tauri.conf.json version v$VERSION" >&2; exit 1; }
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      # Ubuntu 22.04 (not latest) on purpose: the binary links against that release's glibc, so the
+      # AppImage and .deb also run on newer distributions. Tesseract here is 4.1 (libtesseract4).
+      - name: Native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config patchelf libssl-dev libxdo-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libtesseract-dev libleptonica-dev
+
+      - name: UI dependencies and tests
+        working-directory: araskova-doccraft
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+
+      # PDF page rendering is macOS-only for now, so the tests that need it are #[ignore]d here.
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast
+
+      - name: Build the packages
+        run: scripts/release_linux.sh
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: oculus-linux-x64
+          path: dist-release/*
+          if-no-files-found: error
+
   publish:
     name: Draft release
-    needs: [build-macos, build-windows]
-    # Runs when macOS built, even if the (best-effort) Windows build failed or was skipped.
+    needs: [build-macos, build-windows, build-linux]
+    # Runs when macOS built, even if the (best-effort) Windows or Linux build failed or was skipped.
     if: ${{ !cancelled() && needs.build-macos.result == 'success' && startsWith(github.ref, 'refs/tags/v') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: oculus-*
           merge-multiple: true
@@ -233,20 +299,35 @@ jobs:
       - name: Release notes
         run: |
           ls -l dist
+          : > release-notes.md
           if ls dist/*-setup.exe >/dev/null 2>&1; then
-            cat > release-notes.md <<'EOF'
+            cat >> release-notes.md <<'EOF'
           ## Windows
-          The Windows installer (`*_x64-setup.exe`) does not support OCR of scanned PDF pages yet. That needs the macOS build for now.
-          Image OCR (PNG, JPG, TIFF) and all the PDF tools (merge, split, compress, convert and more) work on Windows.
+          Every tool works on Windows. Scanned PDFs are read by drawing their pages in the app first, which is slower than on macOS for long documents.
           The installer is not code-signed unless stated otherwise: Windows SmartScreen may warn, choose "More info", then "Run anyway".
+
           EOF
           else
-            cat > release-notes.md <<'EOF'
+            cat >> release-notes.md <<'EOF'
           ## Windows
-          The Windows build did not complete for this tag, so this release has macOS installers only. See the workflow run's build logs.
+          The Windows build did not complete for this tag, so this release has no Windows installer. See the workflow run's build logs.
+
           EOF
           fi
-      - uses: softprops/action-gh-release@v2
+          if ls dist/*.AppImage dist/*.deb >/dev/null 2>&1; then
+            cat >> release-notes.md <<'EOF'
+          ## Linux
+          `*.AppImage` carries its own libraries and runs on x86-64 distributions from 2022 or newer (Ubuntu 22.04, Debian 12, Fedora 36 and later): make it executable (`chmod +x`) and run it.
+          `*.deb` is for Ubuntu 22.04 and derivatives, which ship the Tesseract 4 library it needs (`sudo apt install ./OCULUS_*.deb`).
+          Every tool works on Linux. Like Windows, scanned PDFs are read by drawing their pages in the app first.
+          EOF
+          else
+            cat >> release-notes.md <<'EOF'
+          ## Linux
+          The Linux build did not complete for this tag, so this release has no Linux packages. See the workflow run's build logs.
+          EOF
+          fi
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           draft: true
           generate_release_notes: true

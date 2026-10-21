@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in OCULUS does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please do not attach confidential documents: describe the file, or make a
+        copy with the private content removed. Security problems go to SECURITY.md, not here.
+  - type: input
+    id: version
+    attributes:
+      label: OCULUS version
+      description: Settings shows it, or the installer file name.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options: [macOS (Apple Silicon), macOS (Intel), Windows, Linux (.deb), Linux (AppImage), Browser (development build)]
+    validations:
+      required: true
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: "Word to PDF"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include the message OCULUS showed, and what is under "Details" if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: file
+    attributes:
+      label: The file
+      description: Its type, size, and the program that made it (for example "PowerPoint 365, 12 slides with charts").

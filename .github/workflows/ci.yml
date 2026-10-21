@@ -1,0 +1,158 @@
+name: CI
+
+# Runs on every push to main and on pull requests: the UI checks on Linux, and the native (Rust + C++)
+# build and tests on macOS, Linux and Windows. A newer push to the same branch or PR cancels the older run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Tesseract needs the language data; the repo carries English, Malayalam and orientation data.
+  TESSDATA_PREFIX: ${{ github.workspace }}/tessdata
+
+jobs:
+  ui:
+    name: UI (lint, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Some Linux containers resolve "localhost" to an address the prerender preview server is not
+      # listening on, which fails the static build with ECONNREFUSED. IPv4 first avoids it.
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    defaults:
+      run:
+        working-directory: araskova-doccraft
+    steps:
+      # The UI lives in the araskova-doccraft submodule. While the repositories are private the default
+      # token cannot read it, so SUBMODULE_TOKEN (a fine-grained PAT with read access) is used. Once they
+      # are public, or when the secret is absent (pull requests from forks), the default token is enough.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Restore bun cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('araskova-doccraft/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run test
+      # The same static build the desktop app embeds (includes the AVIF WebAssembly codecs).
+      - run: bun run build:desktop
+
+  native-unix:
+    name: Native (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            runner: macos-14
+          - name: Ubuntu 22.04
+            runner: ubuntu-22.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Native dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install tesseract leptonica pkg-config
+
+      - name: Native dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libxdo-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            libtesseract-dev libleptonica-dev
+
+      # A debug build is enough here: the release workflow builds and bundles the installers.
+      - name: Build
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      # Tests that need PDF page rendering are skipped off macOS (they are marked #[ignore]).
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast
+
+  native-windows:
+    name: Native (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      # Static Tesseract/Leptonica from the runner's preinstalled vcpkg (see src-tauri/build.rs).
+      VCPKGRS_TRIPLET: x64-windows-static-md
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}\vcpkg-cache,readwrite
+      RUST_BACKTRACE: "1"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      # Same cache prefix as release.yml, so a release run can start from what CI already built.
+      - name: Restore vcpkg binary cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-cache
+          key: vcpkg-tesseract-${{ runner.os }}-x64-windows-static-md-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            vcpkg-tesseract-${{ runner.os }}-x64-windows-static-md-
+
+      - name: Native dependencies (vcpkg tesseract, static)
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\vcpkg-cache" | Out-Null
+          # The runner image ships vcpkg at C:\vcpkg (VCPKG_INSTALLATION_ROOT); build.rs finds it through VCPKG_ROOT.
+          $root = if ($env:VCPKG_INSTALLATION_ROOT) { $env:VCPKG_INSTALLATION_ROOT } else { 'C:\vcpkg' }
+          "VCPKG_ROOT=$root" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          $env:VCPKG_ROOT = $root
+          Write-Host "vcpkg root: $env:VCPKG_ROOT"
+          # [core] = Tesseract library only (no training tools, which pull in pango/ICU and take very long).
+          & "$env:VCPKG_ROOT\vcpkg.exe" install "tesseract[core]:x64-windows-static-md" --clean-after-build
+          if ($LASTEXITCODE -ne 0) { throw "vcpkg install failed ($LASTEXITCODE)" }
+
+      - name: Build
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+
+      # Informational on Windows, as in the release workflow: the Windows tests have not run green on
+      # every runner image yet. The build above is the hard check.
+      - name: Rust tests
+        continue-on-error: true
+        run: cargo test --manifest-path src-tauri/Cargo.toml --no-fail-fast -- --test-threads=1

@@ -27,7 +27,10 @@ fn test_chaos_malformed_truncated_pdf() {
         &cancel,
         |_c, _t, _m| {},
     );
-    assert!(res.is_err(), "Malformed truncated PDF must return an Err, not panic");
+    assert!(
+        res.is_err(),
+        "Malformed truncated PDF must return an Err, not panic"
+    );
 
     // 2. Garbage bytes with PDF magic
     let garbage_pdf = b"%PDF-corrupted-random-garbage-data-here-1234567890";
@@ -77,16 +80,28 @@ fn test_chaos_malformed_truncated_images() {
     // 1. Truncated PNG header
     let truncated_png = b"\x89PNG\r\n\x1a\n";
     let res = engine.run_ocr("chaos-trunc-png", "trunc.png", truncated_png, "eng", opts);
-    assert!(res.is_err(), "Truncated PNG must return an error without panicking");
+    assert!(
+        res.is_err(),
+        "Truncated PNG must return an error without panicking"
+    );
 
     // 2. Corrupted JPEG SOI header only
     let corrupt_jpeg = b"\xFF\xD8\xFF\xE0\x00\x10JFIF";
-    let res_jpeg = engine.run_ocr("chaos-corrupt-jpg", "corrupt.jpg", corrupt_jpeg, "eng", opts);
+    let res_jpeg = engine.run_ocr(
+        "chaos-corrupt-jpg",
+        "corrupt.jpg",
+        corrupt_jpeg,
+        "eng",
+        opts,
+    );
     assert!(res_jpeg.is_err(), "Corrupt JPEG must fail gracefully");
 
     // 3. Preprocessing on corrupt image
     let res_prep = NativeEngine::preprocess_image(truncated_png, opts);
-    assert!(res_prep.is_err(), "Preprocessing truncated PNG must fail cleanly");
+    assert!(
+        res_prep.is_err(),
+        "Preprocessing truncated PNG must fail cleanly"
+    );
 }
 
 #[test]
@@ -115,17 +130,24 @@ fn test_chaos_extreme_dimension_image() {
 
     let mut png_bytes = Vec::new();
     let mut cursor = Cursor::new(&mut png_bytes);
-    img.write_to(&mut cursor, image::ImageFormat::Png).expect("Encode large PNG");
+    img.write_to(&mut cursor, image::ImageFormat::Png)
+        .expect("Encode large PNG");
 
     assert!(png_bytes.len() > 10_000, "Large PNG must be encoded");
 
     // 1. Preprocess extreme image
     let prep_res = NativeEngine::preprocess_image(&png_bytes, opts);
-    assert!(prep_res.is_ok(), "Preprocessing large 3500x3500 image should succeed without OOM");
+    assert!(
+        prep_res.is_ok(),
+        "Preprocessing large 3500x3500 image should succeed without OOM"
+    );
 
     // 2. Run OCR on extreme image
     let ocr_res = engine.run_ocr("chaos-large-img", "large.png", &png_bytes, "eng", opts);
-    assert!(ocr_res.is_ok(), "OCR on large 3500x3500 image should complete safely");
+    assert!(
+        ocr_res.is_ok(),
+        "OCR on large 3500x3500 image should complete safely"
+    );
 }
 
 #[test]
@@ -173,12 +195,18 @@ fn test_chaos_unusual_unicode_and_malayalam_edge_cases() {
     };
 
     let structured = DocumentIntelligence::analyze(&ocr_result);
-    assert!(!structured.fields.is_empty(), "Should extract key-value with Malayalam separator");
+    assert!(
+        !structured.fields.is_empty(),
+        "Should extract key-value with Malayalam separator"
+    );
     assert!(structured.fields.contains_key("വിവരം"));
 
     // Test JSON serialization of edge-case Unicode
     let json = serde_json::to_string(&ocr_result).expect("Serialize to JSON");
-    assert!(json.contains("വിവരം"), "JSON must preserve raw UTF-8 characters");
+    assert!(
+        json.contains("വിവരം"),
+        "JSON must preserve raw UTF-8 characters"
+    );
     let deserialized: OcrResult = serde_json::from_str(&json).expect("Deserialize from JSON");
     assert_eq!(deserialized.pages[0].blocks[1].text, normalized);
 }
@@ -232,7 +260,10 @@ async fn test_chaos_batch_immediate_cancellation() {
         .await
         .expect("Cancelled batch run");
 
-    assert_eq!(summary.failed_files, 1, "Batch summary must report 1 failed file on cancel");
+    assert_eq!(
+        summary.failed_files, 1,
+        "Batch summary must report 1 failed file on cancel"
+    );
     assert_eq!(
         summary.results[0].error.as_deref(),
         Some("Job cancelled by user")
@@ -253,21 +284,21 @@ fn test_chaos_export_searchable_pdf_from_image_source() {
     );
 
     // But create_searchable_pdf expects raster image bytes directly!
-    let out_dir = std::env::temp_dir().join(format!("oculus_searchable_test_{}", uuid::Uuid::new_v4()));
+    let out_dir =
+        std::env::temp_dir().join(format!("oculus_searchable_test_{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&out_dir).expect("Create temp dir");
     let output_base = out_dir.join("image_searchable");
 
-    let pdf_res = engine.create_searchable_pdf(
-        &img_bytes,
-        "eng",
-        &output_base.to_string_lossy(),
-    );
+    let pdf_res = engine.create_searchable_pdf(&img_bytes, "eng", &output_base.to_string_lossy());
     assert!(
         pdf_res.is_ok(),
         "create_searchable_pdf should succeed directly with image bytes without going through render_pdf_page"
     );
     let final_pdf = out_dir.join("image_searchable.pdf");
-    assert!(final_pdf.exists(), "Searchable PDF should be written to disk");
+    assert!(
+        final_pdf.exists(),
+        "Searchable PDF should be written to disk"
+    );
 }
 
 #[test]
@@ -295,7 +326,12 @@ fn test_chaos_concurrent_engine_invocations() {
 
     for (i, h) in handles.into_iter().enumerate() {
         let res = h.join().expect("Thread joined successfully");
-        assert!(res.is_ok(), "Concurrent OCR invocation #{} failed: {:?}", i, res.err());
+        assert!(
+            res.is_ok(),
+            "Concurrent OCR invocation #{} failed: {:?}",
+            i,
+            res.err()
+        );
         let ocr_res = res.expect("Valid OCR result from thread");
         assert!(ocr_res.pages[0].text.contains("OCULUS"));
     }
@@ -321,17 +357,38 @@ fn test_chaos_structured_extraction_varied_separators() {
 
     let structured = DocumentIntelligence::analyze(&ocr_result);
     // Standard colon
-    assert!(structured.fields.contains_key("പേര്"), "Must extract standard colon key");
+    assert!(
+        structured.fields.contains_key("പേര്"),
+        "Must extract standard colon key"
+    );
     assert_eq!(structured.fields.get("പേര്").expect("Field exists"), "അർജുൻ");
     // Dash separator
-    assert!(structured.fields.contains_key("സ്ഥലം"), "Must extract dash separator key");
-    assert_eq!(structured.fields.get("സ്ഥലം").expect("Field exists"), "എറണാകുളം");
+    assert!(
+        structured.fields.contains_key("സ്ഥലം"),
+        "Must extract dash separator key"
+    );
+    assert_eq!(
+        structured.fields.get("സ്ഥലം").expect("Field exists"),
+        "എറണാകുളം"
+    );
     // Full-width colon
-    assert!(structured.fields.contains_key("രജിസ്ട്രേഷൻ"), "Must extract full-width colon key");
-    assert_eq!(structured.fields.get("രജിസ്ട്രേഷൻ").expect("Field exists"), "KL-07-2026");
+    assert!(
+        structured.fields.contains_key("രജിസ്ട്രേഷൻ"),
+        "Must extract full-width colon key"
+    );
+    assert_eq!(
+        structured.fields.get("രജിസ്ട്രേഷൻ").expect("Field exists"),
+        "KL-07-2026"
+    );
     // Equals sign
-    assert!(structured.fields.contains_key("ആകെ തുക"), "Must extract equals sign key");
-    assert_eq!(structured.fields.get("ആകെ തുക").expect("Field exists"), "4500");
+    assert!(
+        structured.fields.contains_key("ആകെ തുക"),
+        "Must extract equals sign key"
+    );
+    assert_eq!(
+        structured.fields.get("ആകെ തുക").expect("Field exists"),
+        "4500"
+    );
 }
 
 #[test]
@@ -366,7 +423,10 @@ fn test_chaos_perform_export_and_directory_creation() {
     };
 
     let export_res = oculus_lib::commands::perform_export(&engine, req);
-    assert!(export_res.is_ok(), "perform_export should create parent directories automatically");
+    assert!(
+        export_res.is_ok(),
+        "perform_export should create parent directories automatically"
+    );
     assert!(target_file.exists(), "Exported file must exist on disk");
     let content = fs::read_to_string(&target_file).expect("Read exported file");
     assert_eq!(content, "Hello OCULUS Export");
@@ -428,7 +488,11 @@ fn test_export_default_destination_never_writes_to_root() {
         Some(std::path::Path::new("/")),
         "Default export must NEVER target the read-only root filesystem '/'"
     );
-    assert!(path.exists(), "Exported file must exist at {}", path.display());
+    assert!(
+        path.exists(),
+        "Exported file must exist at {}",
+        path.display()
+    );
     let _ = fs::remove_file(path);
 
     // Case 2: destination_path explicitly set to root directory path (e.g. "/ST-Agency-P-0001_extracted.txt")
@@ -456,11 +520,11 @@ fn test_export_default_destination_never_writes_to_root() {
     let _ = fs::remove_file(path_explicit);
 }
 
-
 #[test]
 fn test_export_rejects_unsupported_format() {
     let engine = NativeEngine::new(None).expect("Engine init");
-    let target = std::env::temp_dir().join(format!("oculus_unsupported_{}.jsonl", uuid::Uuid::new_v4()));
+    let target =
+        std::env::temp_dir().join(format!("oculus_unsupported_{}.jsonl", uuid::Uuid::new_v4()));
     let req = oculus_lib::models::ExportRequest {
         document_id: "doc-unsupported".to_string(),
         format: "jsonl".to_string(),
@@ -474,7 +538,11 @@ fn test_export_rejects_unsupported_format() {
         },
         destination_path: Some(target.to_string_lossy().into_owned()),
     };
-    let err = oculus_lib::commands::perform_export(&engine, req).expect_err("jsonl is no longer exported");
+    let err = oculus_lib::commands::perform_export(&engine, req)
+        .expect_err("jsonl is no longer exported");
     assert!(err.contains("Unsupported export format"), "got: {err}");
-    assert!(!target.exists(), "nothing may be written for an unsupported format");
+    assert!(
+        !target.exists(),
+        "nothing may be written for an unsupported format"
+    );
 }

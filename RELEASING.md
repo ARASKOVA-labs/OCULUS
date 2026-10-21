@@ -35,7 +35,7 @@ the installers as workflow artifacts only.
 
 | Secret | Needed | What it is |
 |---|---|---|
-| `SUBMODULE_TOKEN` | While the repos are private | Fine-grained token with read access to `ARASKOVA-labs/araskova-doccraft` (a private UI submodule is not readable with the default workflow token). Once both repositories are public the workflows fall back to the default token and the secret can be deleted. |
+| `SUBMODULE_SSH_KEY` | While the UI repo is private | Private half of a read-only **deploy key** on `ARASKOVA-labs/araskova-doccraft` (the "OCULUS CI (read-only)" key under that repository's Settings → Deploy keys); the default workflow token cannot read another private repository. It opens only that repository, read-only. Once it is public the workflows fall back to the default token, and the secret and the deploy key can be deleted. To replace it: `ssh-keygen -t ed25519 -N "" -f key`, `gh repo deploy-key add key.pub --repo ARASKOVA-labs/araskova-doccraft`, `gh secret set SUBMODULE_SSH_KEY --repo ARASKOVA-labs/OCULUS < key`, then delete both files. |
 | `APPLE_CERTIFICATE` | No | Base64 of a *Developer ID Application* `.p12` certificate. |
 | `APPLE_CERTIFICATE_PASSWORD` | With the certificate | Password of that `.p12`. |
 | `APPLE_SIGNING_IDENTITY` | With the certificate | e.g. `Developer ID Application: Araskova (TEAMID)`. |
@@ -147,7 +147,7 @@ by the Release workflow above); a newer push cancels the older run. It runs:
   The Windows tests are informational, as in the release; its build is not.
 
 CI needs no secrets once the repositories are public. While they are private it uses
-`SUBMODULE_TOKEN` to read the UI submodule. Cargo builds, the vcpkg packages and bun downloads are
+`SUBMODULE_SSH_KEY` to read the UI submodule. Cargo builds, the vcpkg packages and bun downloads are
 cached, so a run after the first is much faster.
 
 ## What the release build does for security

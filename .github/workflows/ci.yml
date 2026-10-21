@@ -31,13 +31,23 @@ jobs:
       run:
         working-directory: araskova-doccraft
     steps:
-      # The UI lives in the araskova-doccraft submodule. While the repositories are private the default
-      # token cannot read it, so SUBMODULE_TOKEN (a fine-grained PAT with read access) is used. Once they
-      # are public, or when the secret is absent (pull requests from forks), the default token is enough.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+      # The interface is the araskova-doccraft submodule, checked out at the commit this one pins.
+      # While that repository is private, SUBMODULE_SSH_KEY (a read-only deploy key on it) opens it;
+      # without the secret (once public, or in pull requests from forks) the default token is used.
+      - name: Interface commit
+        id: ui
+        shell: bash
+        working-directory: .
+        run: echo "sha=$(git rev-parse HEAD:araskova-doccraft)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ARASKOVA-labs/araskova-doccraft
+          ref: ${{ steps.ui.outputs.sha }}
+          path: araskova-doccraft
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
           persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
@@ -74,8 +84,21 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+      # The interface is the araskova-doccraft submodule, checked out at the commit this one pins.
+      # While that repository is private, SUBMODULE_SSH_KEY (a read-only deploy key on it) opens it;
+      # without the secret (once public, or in pull requests from forks) the default token is used.
+      - name: Interface commit
+        id: ui
+        shell: bash
+        working-directory: .
+        run: echo "sha=$(git rev-parse HEAD:araskova-doccraft)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ARASKOVA-labs/araskova-doccraft
+          ref: ${{ steps.ui.outputs.sha }}
+          path: araskova-doccraft
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
@@ -118,8 +141,21 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN || github.token }}
+          persist-credentials: false
+      # The interface is the araskova-doccraft submodule, checked out at the commit this one pins.
+      # While that repository is private, SUBMODULE_SSH_KEY (a read-only deploy key on it) opens it;
+      # without the secret (once public, or in pull requests from forks) the default token is used.
+      - name: Interface commit
+        id: ui
+        shell: bash
+        working-directory: .
+        run: echo "sha=$(git rev-parse HEAD:araskova-doccraft)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: ARASKOVA-labs/araskova-doccraft
+          ref: ${{ steps.ui.outputs.sha }}
+          path: araskova-doccraft
+          ssh-key: ${{ secrets.SUBMODULE_SSH_KEY }}
           persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable

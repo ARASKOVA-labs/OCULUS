@@ -14,6 +14,11 @@ three. They are published as a **pre-release** named `OCULUS <version> build <n>
 [Releases](https://github.com/ARASKOVA-labs/OCULUS/releases). Pre-releases are never marked
 "latest", only the five newest builds are kept, and a newer push cancels a build still running.
 
+Published files have names that never change (`OCULUS-mac-apple-silicon.dmg`, `OCULUS-mac-intel.dmg`,
+`OCULUS-windows-setup.exe`, `OCULUS-linux.deb`, `OCULUS-linux.AppImage`, each with a `.sha256`), so
+`https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/<name>` always gives the newest
+version; the website's download buttons use these links. Local builds keep the versioned names.
+
 ## Cut a release
 
 1. Set the version in `src-tauri/tauri.conf.json` (and `src-tauri/Cargo.toml`).

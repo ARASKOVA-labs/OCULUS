@@ -376,6 +376,21 @@ jobs:
           pattern: oculus-*
           merge-multiple: true
           path: dist
+      # names that never change, so https://github.com/<repo>/releases/latest/download/<name> always
+      # gives the newest (the website's download buttons); checksums are made for those names
+      - name: Stable file names and checksums
+        working-directory: dist
+        run: |
+          rm -f -- *.sha256
+          rename() { for f in $1; do [ -e "$f" ] && mv -- "$f" "$2"; done; }
+          rename '*_aarch64.dmg' OCULUS-mac-apple-silicon.dmg
+          rename '*_x64.dmg' OCULUS-mac-intel.dmg
+          rename '*_x64-setup.exe' OCULUS-windows-setup.exe
+          rename '*_amd64.deb' OCULUS-linux.deb
+          rename '*_amd64.AppImage' OCULUS-linux.AppImage
+          for f in OCULUS-*; do sha256sum -- "$f" > "$f.sha256"; done
+          ls -l
+
       - name: Release notes
         run: |
           ls -l dist

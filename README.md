@@ -61,59 +61,72 @@ desktop app; let go in the middle to see every tool that takes it.
 ## Install
 
 Download the installer for your system from
-[**Releases**](https://github.com/ARASKOVA-labs/OCULUS/releases). Every release lists SHA-256
-checksums so you can verify the download.
+[**Releases**](https://github.com/ARASKOVA-labs/OCULUS/releases/latest). Every file has a SHA-256
+checksum beside it so you can verify the download.
+
+Or use the [OCULUS website](https://github.com/ARASKOVA-labs/oculus-website), which picks the file for your system.
 
 | System | File |
 |---|---|
-| **macOS** 11 or later, Apple Silicon | `OCULUS_<version>_aarch64.dmg` |
-| **macOS** 11 or later, Intel | `OCULUS_<version>_x64.dmg` |
-| **Windows** 10 and 11 (x64) | `OCULUS_<version>_x64-setup.exe` |
-| **Linux** x64: Ubuntu 22.04, Debian 12 | `OCULUS_<version>_amd64.deb` |
-| **Linux** x64: anything else from 2022 on (Ubuntu 24.04, Fedora...) | `OCULUS_<version>_amd64.AppImage` |
+| **macOS** 11 or later, Apple Silicon | `OCULUS-mac-apple-silicon.dmg` |
+| **macOS** 11 or later, Intel | `OCULUS-mac-intel.dmg` |
+| **Windows** 10 and 11 (x64) | `OCULUS-windows-setup.exe` |
+| **Linux** x64: Ubuntu 22.04, Debian 12 | `OCULUS-linux.deb` |
+| **Linux** x64: anything else from 2022 on (Ubuntu 24.04, Fedora...) | `OCULUS-linux.AppImage` |
 
 ### Commands to install and check it runs
 
-Replace `0.1.0` with the version you downloaded. The checksum each command prints must match the
-`.sha256` file next to the download on the release page.
+Each file has a `.sha256` beside it; the check must say `OK` (or print the same hash).
+`https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/` always serves the newest release.
 
 **macOS** (Terminal)
 
 ```bash
-uname -m                                                # arm64: take aarch64.dmg; x86_64: take x64.dmg
-shasum -a 256 ~/Downloads/OCULUS_0.1.0_aarch64.dmg      # compare with the .sha256 file
-open ~/Downloads/OCULUS_0.1.0_aarch64.dmg               # drag OCULUS onto Applications
+cd ~/Downloads
+uname -m                                   # arm64: Apple Silicon; x86_64: Intel (take OCULUS-mac-intel.dmg)
+curl -LO https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/OCULUS-mac-apple-silicon.dmg
+curl -LO https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/OCULUS-mac-apple-silicon.dmg.sha256
+shasum -a 256 -c OCULUS-mac-apple-silicon.dmg.sha256      # must say: OK
+open OCULUS-mac-apple-silicon.dmg                          # drag OCULUS onto Applications
 # Until OCULUS is notarised by Apple, macOS blocks the first launch. Either allow it in
 # System Settings > Privacy & Security > "Open Anyway", or clear the download flag:
 xattr -dr com.apple.quarantine /Applications/OCULUS.app
-open /Applications/OCULUS.app                           # the OCULUS orb appears at the bottom right
+open /Applications/OCULUS.app                              # the OCULUS orb appears at the bottom right
 ```
 
 **Windows** (PowerShell)
 
 ```powershell
-Get-FileHash "$env:USERPROFILE\Downloads\OCULUS_0.1.0_x64-setup.exe" -Algorithm SHA256   # compare
-Unblock-File "$env:USERPROFILE\Downloads\OCULUS_0.1.0_x64-setup.exe"   # until the installer is signed
-& "$env:USERPROFILE\Downloads\OCULUS_0.1.0_x64-setup.exe"              # installs for this user
-# If SmartScreen still warns: More info > Run anyway. OCULUS is then in the Start menu.
+cd $env:USERPROFILE\Downloads
+Invoke-WebRequest https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/OCULUS-windows-setup.exe -OutFile OCULUS-windows-setup.exe
+Invoke-WebRequest https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/OCULUS-windows-setup.exe.sha256 -OutFile OCULUS-windows-setup.exe.sha256
+(Get-FileHash OCULUS-windows-setup.exe -Algorithm SHA256).Hash.ToLower()   # must match the next line
+(Get-Content OCULUS-windows-setup.exe.sha256).Split(' ')[0]
+Unblock-File .\OCULUS-windows-setup.exe       # until the installer is code-signed
+.\OCULUS-windows-setup.exe                    # installs for this user; then OCULUS is in the Start menu
+# If SmartScreen still warns: More info > Run anyway.
 ```
 
 **Linux, Ubuntu 22.04 or Debian 12** (`.deb`)
 
 ```bash
-sha256sum ~/Downloads/OCULUS_0.1.0_amd64.deb             # compare with the .sha256 file
-sudo apt install ~/Downloads/OCULUS_0.1.0_amd64.deb      # also installs Tesseract 4 and WebKitGTK
-oculus-desktop                                           # or open OCULUS from the app menu
-sudo apt remove oculus                                   # to uninstall
+cd ~/Downloads
+wget https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/OCULUS-linux.deb{,.sha256}
+sha256sum -c OCULUS-linux.deb.sha256           # must say: OK
+sudo apt install ./OCULUS-linux.deb            # also installs Tesseract 4 and WebKitGTK
+oculus-desktop                                 # or open OCULUS from the app menu
+sudo apt remove oculus                         # to uninstall
 ```
 
 **Linux, anything else** (`.AppImage`)
 
 ```bash
-sha256sum ~/Downloads/OCULUS_0.1.0_amd64.AppImage
-sudo apt install libfuse2        # Ubuntu 22.04; on 24.04: sudo apt install libfuse2t64; Fedora: sudo dnf install fuse-libs
-chmod +x ~/Downloads/OCULUS_0.1.0_amd64.AppImage
-~/Downloads/OCULUS_0.1.0_amd64.AppImage
+cd ~/Downloads
+wget https://github.com/ARASKOVA-labs/OCULUS/releases/latest/download/OCULUS-linux.AppImage{,.sha256}
+sha256sum -c OCULUS-linux.AppImage.sha256      # must say: OK
+sudo apt install libfuse2      # Ubuntu 22.04; on 24.04: sudo apt install libfuse2t64; Fedora: sudo dnf install fuse-libs
+chmod +x OCULUS-linux.AppImage
+./OCULUS-linux.AppImage
 ```
 
 Quick check once it is open: drop a PDF on OCULUS and choose **Word**. A `.docx` appears next to

@@ -137,3 +137,28 @@ fn test_malayalam_searchable_pdf_generation() {
 
     let _ = fs::remove_file(&pdf_path);
 }
+
+/// A scanned-looking page (turned, blurred, speckled, JPEG) of known text: the words must come
+/// back exactly, written as Malayalam keyboards write them (atomic chillus, no stray ZWNJ), so a
+/// search for a typed word finds them.
+#[test]
+fn test_malayalam_paragraph_reads_exactly() {
+    let dir = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../test_samples/corpus/malayalam/"
+    );
+    let bytes = fs::read(format!("{dir}mal_paragraph_scan.jpg")).expect("Read paragraph scan");
+    let expected = fs::read_to_string(format!("{dir}mal_paragraph_scan.txt")).expect("Read text");
+    let engine = NativeEngine::new(None).expect("Engine init");
+    let res = engine
+        .run_ocr(
+            "doc-paragraph",
+            "mal_paragraph_scan.jpg",
+            &bytes,
+            "mal",
+            PreprocessOptions::default(),
+        )
+        .expect("OCR paragraph");
+    let words = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert_eq!(words(&res.pages[0].text), words(&expected));
+}

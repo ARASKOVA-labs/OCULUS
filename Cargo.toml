@@ -10,4 +10,6 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
-panic = "abort"
+# unwind, not abort: a malformed PDF that makes the PDF library panic then gives an error message
+# (the commands catch it on their worker thread) instead of closing the app
+panic = "unwind"

@@ -53,8 +53,10 @@ so you can see exactly what you will get.
 | **Scanner** | Turn phone photos and scans into clean pages (straightened, shadows removed, black and white or colour), export a PDF, and pull out the text, tables and fields as Excel, CSV or JSON |
 | **OCR & extract** | Read text from scans and photos (English, Malayalam and more), pull out tables and form fields |
 
-Press <kbd>⌘K</kbd> (<kbd>Ctrl</kbd>+<kbd>K</kbd> on Windows and Linux) to search every tool, or
-drop a file on the home screen and OCULUS suggests what to do with it.
+Press <kbd>⌘K</kbd> (<kbd>Ctrl</kbd>+<kbd>K</kbd> on Windows and Linux) to search every tool. Or drag a
+file onto the home screen: a ring of what it can become opens around it. Let go on a format (Word,
+Excel, PDF, Compress...) and it is converted straight away, saved beside the original in the
+desktop app; let go in the middle to see every tool that takes it.
 
 ## Install
 
@@ -62,11 +64,60 @@ Download the installer for your system from
 [**Releases**](https://github.com/ARASKOVA-labs/OCULUS/releases). Every release lists SHA-256
 checksums so you can verify the download.
 
-| System | File | First launch |
-|---|---|---|
-| **macOS** (Apple Silicon and Intel) | `.dmg` | Drag OCULUS to Applications. Until the app is notarised, right-click it and choose **Open** the first time. |
-| **Windows** 10 and 11 (x64) | `-setup.exe` | Until the installer is signed, SmartScreen may warn: choose **More info**, then **Run anyway**. |
-| **Linux** (x64) | `.deb` or `.AppImage` | `sudo apt install ./OCULUS_*.deb`, or `chmod +x` the AppImage and run it. |
+| System | File |
+|---|---|
+| **macOS** 11 or later, Apple Silicon | `OCULUS_<version>_aarch64.dmg` |
+| **macOS** 11 or later, Intel | `OCULUS_<version>_x64.dmg` |
+| **Windows** 10 and 11 (x64) | `OCULUS_<version>_x64-setup.exe` |
+| **Linux** x64: Ubuntu 22.04, Debian 12 | `OCULUS_<version>_amd64.deb` |
+| **Linux** x64: anything else from 2022 on (Ubuntu 24.04, Fedora...) | `OCULUS_<version>_amd64.AppImage` |
+
+### Commands to install and check it runs
+
+Replace `0.1.0` with the version you downloaded. The checksum each command prints must match the
+`.sha256` file next to the download on the release page.
+
+**macOS** (Terminal)
+
+```bash
+uname -m                                                # arm64: take aarch64.dmg; x86_64: take x64.dmg
+shasum -a 256 ~/Downloads/OCULUS_0.1.0_aarch64.dmg      # compare with the .sha256 file
+open ~/Downloads/OCULUS_0.1.0_aarch64.dmg               # drag OCULUS onto Applications
+# Until OCULUS is notarised by Apple, macOS blocks the first launch. Either allow it in
+# System Settings > Privacy & Security > "Open Anyway", or clear the download flag:
+xattr -dr com.apple.quarantine /Applications/OCULUS.app
+open /Applications/OCULUS.app                           # the OCULUS orb appears at the bottom right
+```
+
+**Windows** (PowerShell)
+
+```powershell
+Get-FileHash "$env:USERPROFILE\Downloads\OCULUS_0.1.0_x64-setup.exe" -Algorithm SHA256   # compare
+Unblock-File "$env:USERPROFILE\Downloads\OCULUS_0.1.0_x64-setup.exe"   # until the installer is signed
+& "$env:USERPROFILE\Downloads\OCULUS_0.1.0_x64-setup.exe"              # installs for this user
+# If SmartScreen still warns: More info > Run anyway. OCULUS is then in the Start menu.
+```
+
+**Linux, Ubuntu 22.04 or Debian 12** (`.deb`)
+
+```bash
+sha256sum ~/Downloads/OCULUS_0.1.0_amd64.deb             # compare with the .sha256 file
+sudo apt install ~/Downloads/OCULUS_0.1.0_amd64.deb      # also installs Tesseract 4 and WebKitGTK
+oculus-desktop                                           # or open OCULUS from the app menu
+sudo apt remove oculus                                   # to uninstall
+```
+
+**Linux, anything else** (`.AppImage`)
+
+```bash
+sha256sum ~/Downloads/OCULUS_0.1.0_amd64.AppImage
+sudo apt install libfuse2        # Ubuntu 22.04; on 24.04: sudo apt install libfuse2t64; Fedora: sudo dnf install fuse-libs
+chmod +x ~/Downloads/OCULUS_0.1.0_amd64.AppImage
+~/Downloads/OCULUS_0.1.0_amd64.AppImage
+```
+
+Quick check once it is open: drop a PDF on OCULUS and choose **Word**. A `.docx` appears next to
+the PDF. Reading a scan (**Read text from a scan**) checks that OCR and its language data work.
 
 Every tool works on all three systems. To read a scanned PDF, macOS draws its pages natively;
 Windows and Linux draw them inside the app first, so reading long scanned PDFs is slower there.

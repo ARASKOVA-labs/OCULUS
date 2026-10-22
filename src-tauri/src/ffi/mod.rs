@@ -301,7 +301,7 @@ impl NativeEngine {
                 let page_slice = std::slice::from_raw_parts(res.pages, res.page_count);
                 for p in page_slice {
                     let page_text = if !p.full_text.is_null() {
-                        CStr::from_ptr(p.full_text).to_string_lossy().into_owned()
+                        modern_malayalam(&CStr::from_ptr(p.full_text).to_string_lossy())
                     } else {
                         String::new()
                     };
@@ -311,7 +311,7 @@ impl NativeEngine {
                         let block_slice = std::slice::from_raw_parts(p.blocks, p.block_count);
                         for b in block_slice {
                             let text = if !b.text.is_null() {
-                                CStr::from_ptr(b.text).to_string_lossy().into_owned()
+                                modern_malayalam(&CStr::from_ptr(b.text).to_string_lossy())
                             } else {
                                 String::new()
                             };
@@ -446,5 +446,81 @@ impl NativeEngine {
         }
 
         Ok(())
+    }
+}
+
+/// Tesseract writes Malayalam the pre-2009 way: a chillu as consonant + virama + ZWJ (ന്\u{200D})
+/// rather than its own letter (ൻ), and a word-final virama followed by ZWNJ (ണ്\u{200C}). Both
+/// look the same on screen, but the text then matches nothing typed today (search, copy, Find in
+/// a Word file). This writes them the way keyboards do. A ZWNJ inside a word, where it stops two
+/// consonants from joining, is kept.
+pub fn modern_malayalam(text: &str) -> String {
+    const VIRAMA: char = '\u{0D4D}';
+    let chillu = |c: char| match c {
+        '\u{0D23}' => Some('\u{0D7A}'), // ണ -> ൺ
+        '\u{0D28}' => Some('\u{0D7B}'), // ന -> ൻ
+        '\u{0D30}' => Some('\u{0D7C}'), // ര -> ർ
+        '\u{0D32}' => Some('\u{0D7D}'), // ല -> ൽ
+        '\u{0D33}' => Some('\u{0D7E}'), // ള -> ൾ
+        '\u{0D15}' => Some('\u{0D7F}'), // ക -> ൿ
+        _ => None,
+    };
+    let is_ml_letter = |c: char| ('\u{0D00}'..='\u{0D7F}').contains(&c);
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if let (Some(ch), Some(&VIRAMA), Some(&'\u{200D}')) =
+            (chillu(c), chars.get(i + 1), chars.get(i + 2))
+        {
+            out.push(ch);
+            i += 3;
+            continue;
+        }
+        if c == '\u{200C}' && i > 0 && chars[i - 1] == VIRAMA {
+            if !chars.get(i + 1).is_some_and(|&n| is_ml_letter(n)) {
+                i += 1;
+                continue;
+            }
+        }
+        out.push(c);
+        i += 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod malayalam_tests {
+    use super::modern_malayalam;
+
+    #[test]
+    fn writes_chillus_and_final_viramas_as_keyboards_do() {
+        // as Tesseract gives them
+        let old = "\u{0D24}\u{0D46}\u{0D15}\u{0D4D}\u{0D15}\u{0D41}\u{0D2A}\u{0D1F}\u{0D3F}\u{0D1E}\u{0D4D}\u{0D1E}\u{0D3E}\u{0D31}\u{0D28}\u{0D4D}\u{200D} \u{0D2E}\u{0D3E}\u{0D23}\u{0D4D}\u{200C}.";
+        let new = "\u{0D24}\u{0D46}\u{0D15}\u{0D4D}\u{0D15}\u{0D41}\u{0D2A}\u{0D1F}\u{0D3F}\u{0D1E}\u{0D4D}\u{0D1E}\u{0D3E}\u{0D31}\u{0D7B} \u{0D2E}\u{0D3E}\u{0D23}\u{0D4D}.";
+        assert_eq!(modern_malayalam(old), new);
+        for (c, ch) in [
+            ('\u{0D23}', '\u{0D7A}'),
+            ('\u{0D30}', '\u{0D7C}'),
+            ('\u{0D32}', '\u{0D7D}'),
+            ('\u{0D33}', '\u{0D7E}'),
+            ('\u{0D15}', '\u{0D7F}'),
+        ] {
+            assert_eq!(
+                modern_malayalam(&format!("{c}\u{0D4D}\u{200D}")),
+                ch.to_string()
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_a_zwnj_that_stops_a_conjunct_and_leaves_other_text_alone() {
+        let inside = "\u{0D15}\u{0D4D}\u{200C}\u{0D37}";
+        assert_eq!(modern_malayalam(inside), inside);
+        assert_eq!(
+            modern_malayalam("Invoice 4521, \u{20B9} 320.00"),
+            "Invoice 4521, \u{20B9} 320.00"
+        );
     }
 }

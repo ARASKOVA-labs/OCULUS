@@ -44,8 +44,9 @@ the installers as workflow artifacts only.
 | `WINDOWS_CERTIFICATE_PASSWORD` | With the certificate | Password of that `.pfx`. |
 
 Without the Apple secrets the app is **ad-hoc signed**. It runs, but macOS Gatekeeper warns on
-first launch: right-click the app and choose **Open** (or run
-`xattr -dr com.apple.quarantine /Applications/OCULUS.app`). With the certificate and notarisation
+first launch, and since macOS 15 right-click > Open no longer gets past it: people must use
+System Settings > Privacy & Security > **Open Anyway**, or run
+`xattr -dr com.apple.quarantine /Applications/OCULUS.app` (the README's install commands). With the certificate and notarisation
 secrets the installer opens without a warning.
 
 ## Build locally
@@ -152,7 +153,7 @@ cached, so a run after the first is much faster.
 
 ## What the release build does for security
 
-- Rust is built with `lto = "fat"`, `strip = "symbols"` and `panic = "abort"`; the build machine's
+- Rust is built with `lto = "fat"`, `strip = "symbols"` (and `panic = "unwind"`, so a document that makes a library panic gives an error instead of closing the app); the build machine's
   folder names are remapped out of the binary.
 - The UI is minified and ships **no source maps**; devtools are off in release builds.
 - The window enforces a strict Content-Security-Policy (`src-tauri/tauri.conf.json`): same-origin

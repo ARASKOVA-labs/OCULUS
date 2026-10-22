@@ -515,6 +515,27 @@ pub async fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
     fs::read(p).map_err(|e| format!("Failed to read file '{}': {}", path, e))
 }
 
+/// Saves a converted file next to the document it came from (the home page's drop ring). The
+/// bytes come as the raw request body; the source path and the new name come in headers,
+/// percent-encoded. See `guard::save_beside` for what is refused.
+#[tauri::command]
+pub async fn save_beside(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let header = |key: &str| -> Result<String, String> {
+        let raw = request
+            .headers()
+            .get(key)
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| format!("Missing {}", key))?;
+        guard::percent_decode(raw)
+    };
+    let source = header("x-oculus-source")?;
+    let name = header("x-oculus-name")?;
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected the file's bytes".to_string());
+    };
+    guard::save_beside(&source, &name, bytes).map(|p| p.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub async fn show_in_folder(path: String) -> Result<(), String> {
     // only a real, absolute path: never something the opener would read as an option
